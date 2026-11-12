@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local secrets (never commit) ###
+deploy/env/.env
+*.pem

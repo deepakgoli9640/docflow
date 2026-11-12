@@ -1,0 +1,135 @@
+# merchant-service. Defaults target local development (infra in Docker, service in the IDE).
+# Every secret comes from an environment variable; there are no secret defaults in this file.
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: merchant-service
+  datasource:
+    url: jdbc:postgresql://${MERCHANT_DB_HOST:localhost}:${MERCHANT_DB_PORT:5432}/merchant_db
+    username: ${MERCHANT_DB_USER:merchant_app}
+    password: ${MERCHANT_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000   # fail fast (-> 503) instead of hanging when the DB is down
+  jpa:
+    open-in-view: false          # no lazy loading from controllers; transactions end in the service layer
+    hibernate:
+      ddl-auto: validate         # Flyway owns the schema; Hibernate only checks it matches
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+
+hpg:
+  security:
+    issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    access-token-ttl: 15m
+    encryption-key: ${HPG_ENCRYPTION_KEY:}
+    jwt:
+      private-key-location: ${HPG_JWT_PRIVATE_KEY_LOCATION:}
+      public-key-location: ${HPG_JWT_PUBLIC_KEY_LOCATION:}
+    static-clients:
+      - client-id: ops-console
+        client-secret: ${HPG_OPS_CLIENT_SECRET:}
+        roles: [OPS]
+      - client-id: notification-service
+        client-secret: ${HPG_NOTIFICATION_CLIENT_SECRET:}
+        roles: [SERVICE]
+  merchant:
+    currency: INR
+    max-active-api-keys: 2
+    allow-insecure-webhooks: ${HPG_ALLOW_INSECURE_WEBHOOKS:false}
+    limits:
+      min-amount-floor: 1.00
+      max-amount-per-transaction: 500000.00
+      max-daily-limit: 5000000.00
+      min-payment-ttl-minutes: 5
+      max-payment-ttl-minutes: 1440
+      max-attempts: 5
+      max-refund-window-days: 180
+    defaults:
+      enabled-methods: [CARD, UPI, NETBANKING]
+      capture-mode: AUTO
+      min-amount: 1.00
+      max-amount-per-transaction: 200000.00
+      daily-limit: 1000000.00
+      payment-ttl-minutes: 60
+      max-attempts: 3
+      refund-window-days: 180
+      notify-patient-email: true
+      notify-patient-sms: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+    com.hpg: INFO
+---
+# Running from the IDE or `mvn spring-boot:run` against `--profile infra`: activate profile "local" to read
+# the same deploy/env/.env file Docker Compose uses. Only under this profile, so automated tests can never
+# pick up a developer's local settings.
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - optional:file:../../deploy/env/.env[.properties]
+      - optional:file:./deploy/env/.env[.properties]
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/merchant_db
+logging:
+  structured:
+    format:
+      console: ecs
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+logging:
+  structured:
+    format:
+      console: ecs

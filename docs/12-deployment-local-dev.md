@@ -37,25 +37,31 @@ startup and less memory — fine locally, not for load tests or production.)
 | `tools` | kafka-ui (optional, ~250 MB) |
 
 ```bash
+alias hpg='docker compose -f deploy/docker-compose.yml'   # convenience
+
 # Infra only; run the service you are working on from the IDE (recommended)
-docker compose --profile infra up -d
+hpg --profile infra up -d
 
-# Payment flow end to end (~2.3 GB)
-docker compose --profile infra --profile core up -d
+# Gateway + merchant-service in Docker as well (Phase 2: measured ~550 MB for the whole stack)
+./mvnw -DskipTests package
+hpg --profile infra --profile core up -d --build
 
-# Payment + refund + ledger
-docker compose --profile infra --profile core --profile refund --profile ledger up -d
-
-# Add observability only when you need it
-docker compose --profile obs up -d
+# Later phases add: --profile refund --profile ledger --profile notify --profile recon --profile obs
 
 # Stop everything, keep data / wipe data
-docker compose --profile "*" down
-docker compose --profile "*" down -v
+hpg --profile "*" down
+hpg --profile "*" down -v
 ```
 
+Measured in Phase 2 (`docker stats`, idle after the smoke test): api-gateway 204 MiB,
+merchant-service 246 MiB, postgres 62 MiB, redis 5 MiB.
+
 **Recommended day-to-day workflow:** `infra` in Docker + one or two services from IntelliJ /
-`./mvnw -pl services/payment-service spring-boot:run`. Services that are not running are not
+`./mvnw -pl services/merchant-service spring-boot:run -Dspring-boot.run.profiles=local`. The `local`
+profile makes the service read `deploy/env/.env` (the same file Compose uses). It is deliberately a
+profile and not the default, so automated tests can never pick up a developer's local settings — an
+earlier version imported the file unconditionally and a test silently changed behaviour once a `.env`
+existed. Services that are not running are not
 needed: events wait in Kafka until their consumer starts. This is the event-driven design paying
 off on a small laptop.
 
@@ -63,7 +69,8 @@ off on a small laptop.
 
 | Profile | Purpose |
 |---|---|
-| `local` | Running from the IDE against `infra` on localhost |
+| (none) | Defaults for running on localhost; secrets must come from environment variables |
+| `local` | Same, plus reads `deploy/env/.env` |
 | `docker` | Running inside Compose (hostnames `postgres`, `kafka`, …) |
 | `test` | Testcontainers / WireMock |
 | `prod` | Example production settings: Swagger off, https-only webhooks, strict CORS |
@@ -104,9 +111,12 @@ graceful shutdown (`server.shutdown=graceful`), config only via env.
 
 ## 5. Dockerfiles
 
-Multi-stage per service: Maven build stage (with dependency layer caching) → runtime on
-`eclipse-temurin:21-jre-alpine` using Spring Boot **layered jars** (dependencies change rarely, so
-rebuilds only push the small application layer). Runs as a non-root user.
+One Dockerfile per service. The jar is built on the host (`./mvnw package`) and the Dockerfile only
+packages it: running Maven inside Docker would keep a second multi-GB dependency cache on an 8 GB
+laptop, and CI builds the jar once for both tests and the image. Two stages: extract Spring Boot
+**layers** (dependencies change rarely, so rebuilds only replace the small application layer) →
+runtime on `eclipse-temurin:21-jre-alpine` as a non-root user. The gateway serves the API on 8080 and
+actuator on a separate port 9080 that is never published publicly.
 
 ## 6. CI/CD (GitHub Actions)
 
@@ -120,5 +130,5 @@ rebuilds only push the small application layer). Runs as a non-root user.
 5. On `main`: build Docker images per service (matrix) with Buildx and push to GHCR, tagged with
    the commit SHA.
 
-The repository's existing `maven-publish.yml` (Java 11, publish on release) does not match this
-project and will be replaced in Phase 8.
+Phase 2 ships steps 1–3 (`.github/workflows/ci.yml`); the old `maven-publish.yml` (Java 11) was
+removed. Steps 4–5 arrive in Phase 8.

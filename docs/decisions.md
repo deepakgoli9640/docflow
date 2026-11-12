@@ -1,7 +1,8 @@
 # Decision Log
 
-Lightweight ADRs. Status: **Proposed** until you approve Phase 1. Items marked ⚠️ deviate from the
-original brief and need your explicit OK.
+Lightweight ADRs. D1–D22 were **accepted** at the end of Phase 1 (D22: replace the DocFlow stub at the
+repository root). Items marked ⚠️ deviate from the original brief and were explicitly approved.
+Later entries record decisions made while implementing.
 
 | # | Decision | Alternatives considered | Why |
 |---|---|---|---|
@@ -27,3 +28,11 @@ original brief and need your explicit OK.
 | D20 | Jaeger for traces; Loki optional | Tempo; ELK | Simplest OTLP-native UI; ELK is far too heavy for 8 GB. |
 | D21 ⚠️ | **Spring Boot 3.5.x** (as requested) | Spring Boot 4.x (the repo's current POM uses 4.1.0) | You asked for 3.x and most interview material targets 3.x. Note: 3.5 is the last 3.x line; check its open-source support window — moving to 4.x later is mostly dependency/namespace work. |
 | D22 ⚠️ | **Repository layout**: the branch currently contains an unrelated "DocFlow" Spring Boot stub at the root | (a) Replace the root with the gateway project; (b) put the gateway in a sub-folder | Your call — see the Phase 1 summary. Docs are in `docs/` either way. |
+| D23 | `platform/web-support` separate from `platform/common` | One shared module | `common` stays framework-free and usable by the reactive gateway; servlet plumbing (exception handler, filters) is auto-configured only in MVC services. |
+| D24 | Spring Authorization Server with a **stateless** `OAuth2AuthorizationService` | Default in-memory or JDBC authorization store | The default in-memory store keeps every issued token forever (memory leak with client-credentials); JDBC adds a table we never read. Self-contained JWTs + no introspection endpoint = nothing to store. |
+| D25 | JWT signing key from PEM files, else an **ephemeral** key with a loud warning | Commit a dev key; always require files | No key material in git; zero setup locally; production must mount real keys. |
+| D26 | Max 2 active API keys; last active key cannot be revoked; merchant row locked (`SELECT … FOR UPDATE`) while checking the limit | Optimistic locking | Rotation without downtime; no self-lockout. The limit check reads child rows, so optimistic locking on the merchant would not detect the race — a concurrency test proves the lock works. |
+| D27 | Gateway actuator on separate port 9080 | Same port with deny rules | Prometheus can scrape inside the network, while `/actuator` is not even served on the public listener. |
+| D28 | Dockerfiles package a host-built jar | Maven build stage inside Docker | Avoids a second Maven cache on an 8 GB laptop; CI builds once. |
+| D29 | `deploy/env/.env` is imported only under the `local` profile | Import unconditionally | Tests must not depend on a developer's machine (this bug actually happened, and a test caught it). |
+| D30 | Pin `nimbus-jose-jwt` 9.47 in the parent POM; Maven enforcer `dependencyConvergence` on | Let Maven pick | Resource server and Authorization Server pulled different versions; the enforcer rule makes such conflicts a build error instead of a runtime surprise. |

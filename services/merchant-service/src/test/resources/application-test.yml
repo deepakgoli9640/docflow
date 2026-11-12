@@ -1,0 +1,17 @@
+# Test-only values. These secrets protect nothing outside a throwaway Testcontainers database.
+hpg:
+  merchant:
+    allow-insecure-webhooks: false
+  security:
+    issuer: http://localhost
+    encryption-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+    static-clients:
+      - client-id: ops-console
+        client-secret: test-ops-secret
+        roles: [OPS]
+      - client-id: notification-service
+        client-secret: test-notification-secret
+        roles: [SERVICE]
+logging:
+  level:
+    com.hpg: DEBUG

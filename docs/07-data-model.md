@@ -18,7 +18,7 @@
 | Concern | Convention |
 |---|---|
 | Primary keys | `UUID` generated in the application (UUIDv7, time-ordered → index-friendly). Ledger entries and outbox use `BIGINT` identity for ordering. |
-| Money | `NUMERIC(19,2)` + `currency CHAR(3)`; Java `BigDecimal` wrapped in a `Money` value object. Never `double`/`float`. Paise conversion only inside the Razorpay adapter. |
+| Money | `NUMERIC(19,2)` + `currency VARCHAR(3)` with a `CHECK` for 3 uppercase letters (VARCHAR rather than CHAR avoids Hibernate schema-validation type mismatches); Java `BigDecimal` wrapped in a `Money` value object. Never `double`/`float`. Paise conversion only inside the Razorpay adapter. |
 | Timestamps | `TIMESTAMPTZ`, application and JVM run in UTC (`-Duser.timezone=UTC`, `hibernate.jdbc.time_zone=UTC`). |
 | Audit fields | `created_at`, `updated_at`, `created_by`, `updated_by` (Spring Data JPA auditing) on mutable tables. |
 | Optimistic locking | `version BIGINT NOT NULL` + `@Version` on every mutable aggregate. |

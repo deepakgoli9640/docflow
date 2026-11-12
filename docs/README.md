@@ -1,7 +1,8 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phase 1 — architecture proposal, awaiting approval.** No service code exists yet.
-> Everything below is a design. Where a statement depends on Razorpay behaviour, it is marked
+> Status: **Phase 2 complete** (skeleton, shared libraries, api-gateway, merchant-service).
+> Phases 3–8 are still design. The table at the bottom says exactly what runs today.
+> Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
 > before code relies on it.
 
@@ -35,11 +36,25 @@ contact details.
 | 13 | [Implementation plan](13-implementation-plan.md) | Phases 2–8, deliverables, exit criteria |
 | — | [Decision log](decisions.md) | Every significant decision, the alternatives, and why |
 
-## Implemented vs simulated (kept up to date every phase)
+## Implemented vs simulated
 
-| Capability | Status |
-|---|---|
-| Everything | **Designed only** (Phase 1) |
+Updated every phase. *Real* = runs and is covered by automated tests against real dependencies
+(PostgreSQL / Redis via Testcontainers). *Simulated* = a stand-in, clearly labelled. *Not yet* =
+designed but not built.
 
-This table will be maintained honestly as phases land: each row will say *Real*, *Real (sandbox)*,
-*Simulated* or *Not implemented*.
+| Capability | Status | Notes |
+|---|---|---|
+| Maven multi-module build, shared `common` / `web-support` libraries | **Real** | Phase 2 |
+| Merchant registration, profile, activate / suspend / deactivate lifecycle | **Real** | Phase 2 |
+| Merchant configuration (methods, limits vs platform maximums, capture mode, TTL, webhook URL) | **Real** | Phase 2 |
+| API keys: create (max 2 active), list, revoke, bcrypt-hashed secrets | **Real** | Phase 2 |
+| OAuth2 client-credentials token issuance (Spring Authorization Server), JWKS | **Real** | Signing key is **ephemeral** unless PEM files are configured |
+| JWT validation at gateway and in merchant-service, role-based access, tenant isolation | **Real** | |
+| Audit log (append-only, DB trigger) | **Real** | merchant-service |
+| Webhook secret encryption at rest (AES-256-GCM) | **Real** | |
+| Gateway routing, correlation IDs, Problem Details errors, Redis rate limiting | **Real** | Routes exist only for merchant-service so far |
+| Gateway deny-list for suspended merchants | **Not yet** | Phase 4 (needs merchant events). Until then a suspended merchant's existing token works for ≤ 15 min; new tokens are refused immediately. |
+| Internal webhook-config endpoint for notification-service | **Real** (endpoint) | Its consumer arrives in Phase 4 |
+| Docker images, Compose profiles `infra` / `core`, per-service DB users | **Real** | Kafka and observability profiles in Phases 4 / 7 |
+| CI (GitHub Actions: build + all tests) | **Real** | Image publishing, coverage, secret scanning in Phase 8 |
+| Payments, refunds, ledger, notifications, reconciliation, Razorpay | **Not yet** | Phases 3–6 |

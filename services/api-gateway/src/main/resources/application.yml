@@ -1,0 +1,108 @@
+# api-gateway. Only routes to services that exist are configured; later phases add routes.
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 10s
+          default-filters:
+            - name: RequestSize
+              args:
+                maxSize: 1MB
+            - DedupeResponseHeader=X-Correlation-Id, RETAIN_FIRST
+            - SecureHeaders
+          routes:
+            # --- merchant-service -------------------------------------------------------
+            - id: oauth2-token
+              uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}
+              predicates:
+                - Path=/oauth2/token,/oauth2/jwks
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_TOKEN_PER_SEC:5}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_TOKEN_BURST:10}
+            - id: merchant-registration
+              uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/merchants
+                - Method=POST
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_REGISTER_PER_SEC:1}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_REGISTER_BURST:5}
+            - id: merchant-api
+              uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/merchants/me,/api/v1/merchants/me/**,/api/v1/admin/merchants,/api/v1/admin/merchants/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_API_PER_SEC:50}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_API_BURST:100}
+
+hpg:
+  gateway:
+    jwt:
+      jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
+      issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+
+management:
+  server:
+    # Actuator on its own port: reachable by Prometheus / orchestrator inside the network, never via the
+    # public listener on 8080.
+    port: ${HPG_GATEWAY_MANAGEMENT_PORT:9080}
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    gateway:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+---
+# Running from the IDE or `mvn spring-boot:run` against `--profile infra`: activate profile "local" to read
+# the same deploy/env/.env file Docker Compose uses. Only under this profile, so automated tests can never
+# pick up a developer's local settings.
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - optional:file:../../deploy/env/.env[.properties]
+      - optional:file:./deploy/env/.env[.properties]
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+logging:
+  structured:
+    format:
+      console: ecs

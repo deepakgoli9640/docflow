@@ -1,0 +1,11 @@
+package com.hpg.merchant.domain;
+
+public enum AuditAction {
+    MERCHANT_REGISTERED,
+    MERCHANT_STATUS_CHANGED,
+    PROFILE_UPDATED,
+    CONFIGURATION_UPDATED,
+    WEBHOOK_SECRET_ROTATED,
+    API_KEY_CREATED,
+    API_KEY_REVOKED
+}

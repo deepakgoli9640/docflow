@@ -23,10 +23,12 @@ publishes OpenAPI 3 docs (springdoc) at `/v3/api-docs` and Swagger UI at `/swagg
 
 | Method | Path | Role | Success | Purpose |
 |---|---|---|---|---|
-| POST | `/api/v1/merchants` | public (rate-limited) | 201 | Register hospital → `PENDING_ACTIVATION` |
-| POST | `/api/v1/admin/merchants/{id}/activate` | OPS | 200 | Activate |
-| POST | `/api/v1/admin/merchants/{id}/suspend` | OPS | 200 | Suspend (immediate effect at gateway) |
-| GET | `/api/v1/admin/merchants?status=&page=&sort=` | OPS | 200 | List merchants |
+| POST | `/api/v1/merchants` | public (rate-limited) | 201 | Register hospital → `PENDING_ACTIVATION`; returns first API key and webhook secret once |
+| POST | `/api/v1/admin/merchants/{id}/activate` | OPS | 200 | Activate (or reactivate a suspended merchant); body `{"reason": "..."}` |
+| POST | `/api/v1/admin/merchants/{id}/suspend` | OPS | 200 | Suspend: new tokens refused immediately (gateway deny-list for existing tokens: Phase 4) |
+| POST | `/api/v1/admin/merchants/{id}/deactivate` | OPS | 200 | Permanent |
+| GET | `/api/v1/admin/merchants?status=&page=&sort=` | OPS | 200 | List merchants (sort: createdAt, updatedAt, legalName, status) |
+| GET | `/api/v1/admin/merchants/{id}` | OPS | 200 | One merchant |
 | GET | `/api/v1/merchants/me` | MERCHANT | 200 | Profile |
 | PATCH | `/api/v1/merchants/me` | MERCHANT | 200 | Update profile |
 | GET / PUT | `/api/v1/merchants/me/configuration` | MERCHANT | 200 | Methods, limits, capture mode, TTL, webhook URL |
@@ -38,8 +40,11 @@ publishes OpenAPI 3 docs (springdoc) at `/v3/api-docs` and Swagger UI at `/swagg
 | GET | `/oauth2/jwks` | public | 200 | Public keys for JWT validation |
 | GET | `/internal/v1/merchants/{id}/webhook-config` | SERVICE | 200 | For notification-service only; not routed by the gateway |
 
-Limits are set by OPS within platform maximums; merchants can lower but not raise them
-(`PUT .../configuration` validates against the platform caps).
+Platform maximums (per-transaction, daily, TTL range, attempts, refund window) are platform
+configuration (`hpg.merchant.limits`); merchants choose values within them and anything above is
+rejected with `422 LIMIT_EXCEEDS_PLATFORM_MAXIMUM`. A merchant can hold at most 2 active API keys
+(enough for zero-downtime rotation) and cannot revoke its last active key. Samples:
+[samples/http/merchant.http](../samples/http/merchant.http).
 
 ## 3. Payment service
 

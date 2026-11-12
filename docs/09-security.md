@@ -57,7 +57,8 @@ keys at once to rotate without downtime.
 
 ### 2.2 Ops users
 
-Locally: an `ops` OAuth client seeded from environment variables gets `roles: [OPS]`.
+Locally: an `ops-console` OAuth client whose secret comes from `HPG_OPS_CLIENT_SECRET` gets
+`roles: [OPS]` (an empty secret disables the client — there are no default credentials).
 Production recommendation: human users sign in through the company IdP (OIDC — Okta/Azure AD/
 Keycloak) with MFA; services trust that issuer as well. Not built locally because running Keycloak
 costs ~500 MB+ RAM.

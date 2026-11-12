@@ -4,7 +4,15 @@ Each phase ends with: compile (`./mvnw -B verify`), all tests green, docs update
 implemented-vs-simulated table in [README](README.md)), and the exact commands to run what was
 built. No phase starts while the previous one has unresolved critical errors.
 
-## Phase 2 — Foundation, gateway, merchant-service
+## Phase 2 — Foundation, gateway, merchant-service ✅ done
+
+Delivered as planned, with these differences:
+- Added `platform/web-support` (servlet-only plumbing) so the reactive gateway does not inherit
+  Spring MVC classes from `common`.
+- Spotless was not added (formatting rules can come with CI hardening in Phase 8).
+- Gateway deny-list for suspended merchants moves to Phase 4 (it is fed by merchant events).
+- A minimal CI workflow (build + all tests) was added now rather than waiting for Phase 8.
+- Tests: 114 total — 69 unit, 45 integration (Testcontainers PostgreSQL and Redis, WireMock).
 
 - Maven multi-module skeleton, parent POM with Spring Boot 3.5.x / Spring Cloud 2025.0.x BOMs,
   Java 21, enforcer plugin, Spotless formatting.

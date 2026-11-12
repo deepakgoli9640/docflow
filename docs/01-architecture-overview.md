@@ -112,7 +112,8 @@ com.hpg.<service>
 
 | Module | Contents | Rule |
 |---|---|---|
-| `platform/common` | `Money`, error model (RFC 9457 Problem Details), correlation-ID filter, log masking utilities, base exception handler | No business logic, no entities |
+| `platform/common` | `Money`, UUIDv7 ids, error codes, correlation-ID rules, masking, AES-GCM field encryption — plain Java, no Spring | No business logic, no entities |
+| `platform/web-support` | Servlet (Spring MVC) plumbing, auto-configured: Problem Details exception handler, correlation-ID filter, JWT role mapping, `MerchantPrincipal`, pagination helpers | Not used by the reactive gateway |
 | `platform/event-contracts` | Event envelope, event payload records, topic names | The *published language* between services; versioned |
 | `platform/messaging` | Transactional outbox (entity + relay), idempotent-consumer helper, Kafka error-handler config | Technical plumbing only |
 
@@ -263,6 +264,7 @@ healthcare-payment-gateway/
 ├── pom.xml                          parent: dependency & plugin management only
 ├── platform/
 │   ├── common/
+│   ├── web-support/
 │   ├── event-contracts/
 │   └── messaging/
 ├── services/
