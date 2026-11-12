@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.hpg</groupId>
+        <artifactId>healthcare-payment-gateway</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>hpg-event-contracts</artifactId>
+    <name>HPG :: Platform :: Event Contracts</name>
+    <description>
+        The published language between services: event envelope, payload records and topic names.
+        Versioned; additive changes only within a version (docs/06-kafka-events.md §4).
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.hpg</groupId>
+            <artifactId>hpg-common</artifactId>
+        </dependency>
+    </dependencies>
+</project>

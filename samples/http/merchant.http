@@ -1,0 +1,132 @@
+### Healthcare Payment Gateway - merchant flow (Phase 2)
+### Works with the IntelliJ HTTP Client and the VS Code "REST Client" extension.
+### Start the stack first:
+###   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d
+### Replace the {{...}} values from earlier responses (or use an http-client.env.json).
+
+@gw = http://localhost:8080
+
+### 1. Register a hospital (public). Response: merchant, apiKey {keyId, keySecret}, webhookSecret.
+###    keySecret and webhookSecret are shown only in this response.
+POST {{gw}}/api/v1/merchants
+Content-Type: application/json
+X-Correlation-Id: sample-register-001
+
+{
+  "legalName": "City Hospital Pvt Ltd",
+  "displayName": "City Hospital",
+  "contactEmail": "billing@cityhospital.example",
+  "contactPhone": "+919800001234"
+}
+
+### Example response (201 Created, Cache-Control: no-store)
+# {
+#   "merchant": { "id": "01a1d131-fd8d-71c7-a2c4-14ddb1f6c853", "legalName": "City Hospital Pvt Ltd",
+#                 "displayName": "City Hospital", "contactEmail": "billing@cityhospital.example",
+#                 "contactPhone": "+919800001234", "status": "PENDING_ACTIVATION",
+#                 "createdAt": "2026-11-12T19:17:56.91Z", "updatedAt": "2026-11-12T19:17:56.91Z" },
+#   "apiKey": { "keyId": "hpgk_FgVWhMyHWD8bFdAzZ3cjVDAs", "keySecret": "<43 chars>",
+#               "createdAt": "2026-11-12T19:17:56.95Z",
+#               "notice": "Store keySecret securely now. It is not stored by HPG and cannot be shown again." },
+#   "webhookSecret": "whsec_<43 chars>"
+# }
+
+### 2. Get an access token (OAuth2 client credentials, HTTP Basic = keyId:keySecret)
+POST {{gw}}/oauth2/token
+Authorization: Basic {{keyId}} {{keySecret}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+
+### Example response (200)
+# { "access_token": "eyJraWQiOi...", "token_type": "Bearer", "expires_in": 899 }
+# Decoded claims: { "sub": "hpgk_...", "mid": "<merchant id>", "roles": ["MERCHANT"],
+#                   "iss": "http://merchant-service:8081", "exp": ... }
+
+### 3. Read my profile
+GET {{gw}}/api/v1/merchants/me
+Authorization: Bearer {{token}}
+
+### 4. Update display name / phone (PATCH: omitted fields unchanged)
+PATCH {{gw}}/api/v1/merchants/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "displayName": "City Hospital - East Wing" }
+
+### 5. Read payment configuration (defaults are applied at registration)
+GET {{gw}}/api/v1/merchants/me/configuration
+Authorization: Bearer {{token}}
+
+### 6. Replace payment configuration
+PUT {{gw}}/api/v1/merchants/me/configuration
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "enabledMethods": ["UPI", "CARD", "NETBANKING"],
+  "captureMode": "MANUAL",
+  "minAmount": { "amount": "10.00", "currency": "INR" },
+  "maxAmountPerTransaction": { "amount": "150000.00", "currency": "INR" },
+  "dailyLimit": { "amount": "2000000.00", "currency": "INR" },
+  "paymentTtlMinutes": 30,
+  "maxAttempts": 3,
+  "refundWindowDays": 90,
+  "webhookUrl": "https://his.cityhospital.example/hpg/webhooks",
+  "notifyPatientEmail": true,
+  "notifyPatientSms": false
+}
+
+### Example error (422) when a limit exceeds the platform maximum
+# {
+#   "type": "https://docs.hpg.example/errors/limit-exceeds-platform-maximum",
+#   "title": "Configured value exceeds the platform maximum", "status": 422,
+#   "detail": "maxAmountPerTransaction exceeds the platform maximum of 500000.00 INR.",
+#   "instance": "/api/v1/merchants/me/configuration",
+#   "errorCode": "LIMIT_EXCEEDS_PLATFORM_MAXIMUM", "correlationId": "e28cf10a-...",
+#   "timestamp": "2026-11-12T19:17:57.809Z",
+#   "field": "maxAmountPerTransaction", "platformMaximum": { "amount": "500000.00", "currency": "INR" }
+# }
+
+### 7. Rotate the webhook signing secret (new secret returned once)
+POST {{gw}}/api/v1/merchants/me/webhook-secret/rotate
+Authorization: Bearer {{token}}
+
+### 8. API key rotation: create a second key, switch clients to it, revoke the old one
+POST {{gw}}/api/v1/merchants/me/api-keys
+Authorization: Bearer {{token}}
+
+###
+GET {{gw}}/api/v1/merchants/me/api-keys
+Authorization: Bearer {{token}}
+
+###
+DELETE {{gw}}/api/v1/merchants/me/api-keys/{{oldKeyId}}
+Authorization: Bearer {{token}}
+
+### ---------------- OPS (client "ops-console", secret = HPG_OPS_CLIENT_SECRET in deploy/env/.env) ----
+
+### 9. Ops token
+POST {{gw}}/oauth2/token
+Authorization: Basic ops-console {{opsSecret}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+
+### 10. List merchants waiting for activation (sortable: createdAt, updatedAt, legalName, status)
+GET {{gw}}/api/v1/admin/merchants?status=PENDING_ACTIVATION&page=0&size=20&sort=createdAt,desc
+Authorization: Bearer {{opsToken}}
+
+### 11. Activate
+POST {{gw}}/api/v1/admin/merchants/{{merchantId}}/activate
+Authorization: Bearer {{opsToken}}
+Content-Type: application/json
+
+{ "reason": "KYC documents verified" }
+
+### 12. Suspend (new tokens are refused immediately)
+POST {{gw}}/api/v1/admin/merchants/{{merchantId}}/suspend
+Authorization: Bearer {{opsToken}}
+Content-Type: application/json
+
+{ "reason": "Chargeback investigation" }
