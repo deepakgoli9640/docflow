@@ -29,7 +29,19 @@ Delivered as planned, with these differences:
 - **Exit:** register → activate → create key → get token → call `GET /merchants/me` through the
   gateway.
 
-## Phase 3 — payment-service and Razorpay
+## Phase 3 — payment-service and Razorpay ✅ done (sandbox run pending keys)
+
+Delivered as planned, with these differences:
+- **Exit criterion partially met:** no Razorpay test keys yet, so the adapter is verified against WireMock
+  stubs of Razorpay's documented API, and the end-to-end demo uses the clearly labelled simulated
+  provider. The real sandbox run is tracked in [razorpay-sandbox-checklist.md](razorpay-sandbox-checklist.md).
+- Added `platform/persistence` (shared JPA base entity, column encryption, auditing; merchant-service
+  refactored onto it) and created `platform/event-contracts` + `platform/messaging` (outbox writer) now,
+  because payment-service writes outbox events from day one. The Kafka relay is still Phase 4.
+- The simulated provider is selected by property (`HPG_PAYMENT_PROVIDER`), not a Spring profile.
+- `FAILED → CAPTURED` was added to the provider-evidence override (money moved after the attempt budget
+  was used up).
+- Tests: 429 in the repository (341 unit, 88 integration); payment-service alone 312.
 
 - Entities/migrations for payment tables; `PaymentStateMachine` with exhaustive unit tests.
 - Idempotency (`idempotency_keys`), duplicate-bill protection, optimistic locking with retry.

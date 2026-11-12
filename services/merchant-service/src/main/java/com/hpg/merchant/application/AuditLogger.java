@@ -3,7 +3,7 @@ package com.hpg.merchant.application;
 import com.hpg.common.correlation.CorrelationId;
 import com.hpg.merchant.domain.AuditAction;
 import com.hpg.merchant.domain.MerchantAuditLog;
-import com.hpg.merchant.infrastructure.config.PersistenceConfig;
+import com.hpg.persistence.Actors;
 import com.hpg.merchant.infrastructure.persistence.MerchantAuditLogRepository;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
@@ -32,7 +32,7 @@ public class AuditLogger {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(UUID merchantId, AuditAction action, Map<String, Object> details) {
-        repository.save(new MerchantAuditLog(merchantId, action, PersistenceConfig.currentActor(),
+        repository.save(new MerchantAuditLog(merchantId, action, Actors.current(),
                 MDC.get(CorrelationId.MDC_KEY), details, clock.instant()));
     }
 }

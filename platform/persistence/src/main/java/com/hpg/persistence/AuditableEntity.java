@@ -1,4 +1,4 @@
-package com.hpg.merchant.domain;
+package com.hpg.persistence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;

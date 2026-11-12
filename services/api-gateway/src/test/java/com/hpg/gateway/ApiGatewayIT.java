@@ -82,6 +82,7 @@ class ApiGatewayIT {
             MERCHANT_SERVICE.start();
         }
         registry.add("HPG_MERCHANT_SERVICE_URI", MERCHANT_SERVICE::baseUrl);
+        registry.add("HPG_PAYMENT_SERVICE_URI", MERCHANT_SERVICE::baseUrl); // same stub plays both services
         registry.add("HPG_TOKEN_ISSUER", () -> ISSUER);
         registry.add("HPG_RATE_TOKEN_PER_SEC", () -> "1");
         registry.add("HPG_RATE_TOKEN_BURST", () -> "3");
@@ -220,6 +221,37 @@ class ApiGatewayIT {
             }
         }
         assertThat(tooMany).as("requests beyond the burst of 3 are refused").isGreaterThanOrEqualTo(4);
+    }
+
+    @Test
+    void checkoutIsPublicAndKeepsTheServicesContentSecurityPolicy() {
+        MERCHANT_SERVICE.stubFor(get(urlEqualTo("/checkout/ck_abc")).willReturn(aResponse()
+                .withHeader("Content-Type", "text/html")
+                .withHeader("Content-Security-Policy", "script-src 'nonce-xyz'")
+                .withBody("<html>checkout</html>")));
+        client.get().uri("/checkout/ck_abc")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valuesMatch("Content-Security-Policy", "script-src 'nonce-xyz'");
+    }
+
+    @Test
+    void providerWebhooksArePublicButSizeLimited() {
+        client.post().uri("/webhooks/razorpay/payments").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"event\":\"payment.captured\"}")
+                .exchange()
+                .expectStatus().isOk();
+        client.post().uri("/webhooks/razorpay/payments").contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"pad\":\"" + "x".repeat(70_000) + "\"}")
+                .exchange()
+                .expectStatus().value(s -> assertThat(s).isIn(400, 413));
+    }
+
+    @Test
+    void paymentApiRequiresAToken() throws Exception {
+        client.get().uri("/api/v1/payments").exchange().expectStatus().isUnauthorized();
+        client.get().uri("/api/v1/payments").header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken())
+                .exchange().expectStatus().isOk();
     }
 
     @Test

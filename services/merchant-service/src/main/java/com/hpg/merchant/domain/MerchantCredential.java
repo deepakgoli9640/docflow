@@ -1,5 +1,6 @@
 package com.hpg.merchant.domain;
 
+import com.hpg.persistence.AuditableEntity;
 import com.hpg.common.id.Ids;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -1,7 +1,8 @@
 package com.hpg.merchant.domain;
 
+import com.hpg.persistence.AuditableEntity;
 import com.hpg.common.money.Money;
-import com.hpg.merchant.infrastructure.persistence.EncryptedStringConverter;
+import com.hpg.persistence.EncryptedStringConverter;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

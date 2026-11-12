@@ -7,8 +7,10 @@ part of a bill. It handles payments, refunds, the ledger, notifications and reco
 Java 21 · Spring Boot 3.5 · Spring Cloud Gateway · Spring Security / Authorization Server ·
 PostgreSQL · Flyway · Kafka (Phase 4) · Redis · Testcontainers · Docker Compose
 
-> **Status: Phase 2 of 8 complete** — project skeleton, shared libraries, API gateway and
-> merchant-service. See [what is implemented](docs/README.md#implemented-vs-simulated) and the
+> **Status: Phase 3 of 8 complete** — gateway, merchant-service and payment-service (state machine,
+> idempotency, checkout, webhooks, recovery). The Razorpay adapter is tested against WireMock; it has
+> **not yet run against the real sandbox** (no test keys) — local demos use a clearly labelled simulated
+> provider. See [what is implemented](docs/README.md#implemented-vs-simulated) and the
 > [implementation plan](docs/13-implementation-plan.md).
 
 ## Documentation
@@ -23,7 +25,11 @@ pom.xml                      parent POM: versions and plugins only
 platform/common/             Money, UUIDv7 ids, error codes, correlation ids, masking, AES-GCM (no Spring)
 platform/web-support/        Servlet plumbing: Problem Details errors, correlation filter, JWT roles, paging
 services/api-gateway/        Spring Cloud Gateway: routing, JWT validation, Redis rate limiting
+platform/persistence/        Shared JPA plumbing: audited base entity, column encryption, UTC clock
+platform/event-contracts/    Event envelope, payment event types, topic names
+platform/messaging/          Transactional outbox writer (Kafka relay in Phase 4)
 services/merchant-service/   Hospital onboarding, API keys, configuration, OAuth2 token issuer
+services/payment-service/    Payments, state machine, idempotency, Razorpay adapter, checkout, webhooks, recovery
 deploy/docker-compose.yml    Local environment, split into profiles
 deploy/postgres/init/        One database + one locked-down user per service
 deploy/env/.env.example      Every setting/secret the stack reads (copy via scripts/init-env.sh)
@@ -47,7 +53,7 @@ docs/                        Architecture documentation
 # 2. Build and run all tests (unit + Testcontainers integration tests; Docker must be running)
 ./mvnw verify
 
-# 3a. Run everything in Docker (~550 MB RAM in total)
+# 3a. Run everything in Docker (~850 MB RAM in total)
 ./mvnw -DskipTests package
 docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d --build
 
@@ -57,8 +63,9 @@ docker compose -f deploy/docker-compose.yml --profile infra up -d
 ./mvnw -pl services/api-gateway      spring-boot:run -Dspring-boot.run.profiles=local
 #    (in the IDE: run MerchantServiceApplication / ApiGatewayApplication with active profile "local")
 
-# 4. Exercise the whole Phase 2 flow through the gateway
+# 4. Exercise the flows through the gateway (uses the SIMULATED provider by default)
 ./scripts/smoke-test-phase2.sh
+./scripts/smoke-test-phase3.sh
 
 # Stop (add -v to also delete the database volume)
 docker compose -f deploy/docker-compose.yml --profile '*' down
@@ -68,7 +75,8 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 |---|---|
 | http://localhost:8080 | API gateway (the only entry point clients use) |
 | http://localhost:8081/swagger-ui.html | merchant-service OpenAPI / Swagger UI |
-| http://localhost:8081/actuator/health | merchant-service health |
+| http://localhost:8082/swagger-ui.html | payment-service OpenAPI / Swagger UI |
+| http://localhost:8080/checkout/{token} | Hosted checkout page (the `checkoutUrl` of a payment) |
 
 Run a single module's tests: `./mvnw -pl services/merchant-service -am verify`.
 Unit tests only (no Docker): `./mvnw test`.
@@ -86,4 +94,13 @@ TOKEN=$(curl -s -u "<keyId>:<keySecret>" -d grant_type=client_credentials $GW/oa
 curl -s -H "Authorization: Bearer $TOKEN" $GW/api/v1/merchants/me | jq
 ```
 
-More requests: [samples/http/merchant.http](samples/http/merchant.http).
+More requests: [samples/http/merchant.http](samples/http/merchant.http),
+[samples/http/payment.http](samples/http/payment.http).
+
+### Payment provider
+
+`deploy/env/.env` → `HPG_PAYMENT_PROVIDER=simulated` (default from `init-env.sh`) runs an in-memory
+**simulated** provider: no money moves, the checkout page says so. To use Razorpay, set
+`HPG_PAYMENT_PROVIDER=razorpay` and the three `RAZORPAY_*` **test-mode** values, then follow
+[docs/razorpay-sandbox-checklist.md](docs/razorpay-sandbox-checklist.md). If you created your `.env`
+during Phase 2, add the line `HPG_PAYMENT_PROVIDER=simulated` to it (or re-run `init-env.sh --force`).

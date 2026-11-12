@@ -1,0 +1,28 @@
+# Test-only values; they protect nothing outside throwaway containers.
+hpg:
+  security:
+    jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
+    issuer: http://localhost
+    encryption-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  payment:
+    checkout-base-url: http://localhost/checkout
+    allow-insecure-return-urls: false
+    jobs:
+      enabled: false            # tests call the recovery service directly
+      created-retry-after: 0s
+      processing-verify-after: 0s
+      unknown-verify-after: 0s
+      pending-verify-interval: 0s
+    resilience:
+      retry-initial-interval: 10ms
+      retry-max-interval: 20ms
+      circuit-breaker-minimum-calls: 1000   # keep the breaker out of the way in functional tests
+    razorpay:
+      key-id: rzp_test_dummy
+      key-secret: test_key_secret
+      webhook-secret: test_webhook_secret
+      connect-timeout: 500ms
+      read-timeout: 800ms
+logging:
+  level:
+    com.hpg: DEBUG

@@ -1,7 +1,7 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phase 2 complete** (skeleton, shared libraries, api-gateway, merchant-service).
-> Phases 3–8 are still design. The table at the bottom says exactly what runs today.
+> Status: **Phase 3 complete** (payment-service, state machine, idempotency, provider integration).
+> Phases 4–8 are still design. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
 > before code relies on it.
@@ -35,6 +35,7 @@ contact details.
 | 12 | [Deployment & local dev](12-deployment-local-dev.md) | Docker Compose profiles for an 8 GB laptop, CI/CD |
 | 13 | [Implementation plan](13-implementation-plan.md) | Phases 2–8, deliverables, exit criteria |
 | — | [Decision log](decisions.md) | Every significant decision, the alternatives, and why |
+| — | [Razorpay sandbox checklist](razorpay-sandbox-checklist.md) | What still has to be verified against the real Razorpay sandbox |
 
 ## Implemented vs simulated
 
@@ -57,4 +58,15 @@ designed but not built.
 | Internal webhook-config endpoint for notification-service | **Real** (endpoint) | Its consumer arrives in Phase 4 |
 | Docker images, Compose profiles `infra` / `core`, per-service DB users | **Real** | Kafka and observability profiles in Phases 4 / 7 |
 | CI (GitHub Actions: build + all tests) | **Real** | Image publishing, coverage, secret scanning in Phase 8 |
-| Payments, refunds, ledger, notifications, reconciliation, Razorpay | **Not yet** | Phases 3–6 |
+| Payment initiation, status, list, capture, cancel; state machine (all 243 transitions tested) | **Real** | Phase 3 |
+| Idempotency-Key (Postgres, same transaction), duplicate-bill protection, daily limit with advisory lock | **Real** | Concurrency-tested |
+| Optimistic locking with transaction re-run (callback / webhook / poll races) | **Real** | |
+| Hosted checkout page (strict CSP), signed callback + immediate provider verification | **Real** | |
+| Webhook endpoint: raw-body HMAC verification, inbox dedupe, out-of-order handling, replay window | **Real** | |
+| Recovery jobs: order-creation retry, PROCESSING/UNKNOWN/PENDING verification, provider-checked expiry (ShedLock) | **Real** | |
+| Razorpay adapter (orders, payments, capture, signatures, error mapping, timeouts) | **Real code, tested against WireMock only** | **Not yet run against the Razorpay sandbox** (no test keys). See [checklist](razorpay-sandbox-checklist.md). |
+| Resilience4j: circuit breaker, retry with jittered backoff, separate live/recovery bulkheads | **Real** | |
+| Simulated payment provider (`HPG_PAYMENT_PROVIDER=simulated`) | **Simulated** | In-memory, for local demos only; clearly labelled on the checkout page and in logs |
+| Outbox events (PaymentInitiated/Authorized/Captured/Failed/Cancelled/Expired) | **Written to outbox table** | Not yet published — Kafka relay arrives in Phase 4 |
+| Merchant config replica in payment-service | **Real table, seeded manually** | TEMPORARY OPS endpoint until merchant events feed it (Phase 4) |
+| Refunds, ledger, notifications, reconciliation | **Not yet** | Phases 4–6 |

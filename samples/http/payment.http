@@ -1,0 +1,90 @@
+### Healthcare Payment Gateway - payment flow (Phase 3)
+### Prerequisites: merchant registered + activated + token (see merchant.http), stack running with
+###   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d
+
+@gw = http://localhost:8080
+
+### 0. TEMPORARY (Phase 3 only): copy the merchant's configuration into payment-service (OPS token).
+###    From Phase 4 merchant-service events do this automatically and this endpoint is removed.
+PUT {{gw}}/api/v1/admin/merchant-config-replicas/{{merchantId}}
+Authorization: Bearer {{opsToken}}
+Content-Type: application/json
+
+{
+  "displayName": "City Hospital", "status": "ACTIVE", "enabledMethods": ["UPI", "CARD"],
+  "captureMode": "AUTO",
+  "minAmount": { "amount": "1.00", "currency": "INR" },
+  "maxAmountPerTransaction": { "amount": "200000.00", "currency": "INR" },
+  "dailyLimit": { "amount": "1000000.00", "currency": "INR" },
+  "paymentTtlMinutes": 60, "maxAttempts": 3
+}
+
+### 1. Initiate a payment. Idempotency-Key is REQUIRED; reuse it when retrying the same request.
+POST {{gw}}/api/v1/payments
+Authorization: Bearer {{token}}
+Idempotency-Key: 7d0f6c1e-3b8a-4f62-9a8e-2b9d1c4e5f60
+X-Correlation-Id: his-req-000981
+Content-Type: application/json
+
+{
+  "merchantReference": "BILL-2026-000981",
+  "amount": { "amount": "20000.00", "currency": "INR" },
+  "description": "Patient share for bill BILL-2026-000981",
+  "customer": { "name": "A Patient", "email": "patient@example.com", "phone": "+919800001234" },
+  "returnUrl": "https://his.cityhospital.example/payments/return",
+  "expiresInMinutes": 60
+}
+
+### Example response (201 Created; Location: /api/v1/payments/{id})
+# {
+#   "id": "01a1d169-b25d-758e-99bb-7e384bd7939c", "merchantReference": "BILL-2026-000981",
+#   "status": "PENDING", "amount": { "amount": "20000.00", "currency": "INR" }, "captureMode": "AUTO",
+#   "description": "Patient share for bill BILL-2026-000981",
+#   "checkoutUrl": "http://localhost:8080/checkout/ck_52E2KHklOnzSm7WgzvNHsDTXevfTtwgYkWs1Retd-w8",
+#   "expiresAt": "2026-11-12T21:17:01Z",
+#   "customer": { "name": "A Patient", "email": "p*****t@example.com", "phone": "+91******1234" },
+#   "createdAt": "2026-11-12T20:17:01Z", "updatedAt": "2026-11-12T20:17:01Z"
+# }
+# Sending the same request with the same key again returns the same payment + "Idempotent-Replayed: true".
+# Same key with a different body -> 422 IDEMPOTENCY_KEY_REUSED.
+# New key, same merchantReference while the first is live -> 409 DUPLICATE_PAYMENT (+ existingPaymentId).
+
+### 2. The patient opens checkoutUrl in a browser and pays on the provider's page.
+###    With HPG_PAYMENT_PROVIDER=simulated the page shows SIMULATED buttons instead.
+
+### 3. Payment with attempts and full status history
+GET {{gw}}/api/v1/payments/{{paymentId}}
+Authorization: Bearer {{token}}
+
+### Example (after a successful checkout)
+# { "id": "...", "status": "CAPTURED", "capturedAt": "2026-11-12T20:18:40Z",
+#   "attempts": [ { "providerPaymentId": "pay_N1a2b3c4d5e6f7", "method": "upi", "status": "CAPTURED",
+#                   "duplicateCapture": false, "createdAt": "..." } ],
+#   "statusHistory": [
+#     { "to": "CREATED", "source": "MERCHANT_API", "at": "..." },
+#     { "from": "CREATED", "to": "PENDING", "source": "PROVIDER_RESPONSE", "reason": "provider order created" },
+#     { "from": "PENDING", "to": "PROCESSING", "source": "CHECKOUT_CALLBACK" },
+#     { "from": "PROCESSING", "to": "CAPTURED", "source": "PROVIDER_POLL", "reason": "provider reports captured" } ] }
+
+### 4. List (filters: status, merchantReference, from, to; sort: createdAt, updatedAt, amount, status)
+GET {{gw}}/api/v1/payments?status=CAPTURED&from=2026-11-01T00:00:00Z&page=0&size=20&sort=createdAt,desc
+Authorization: Bearer {{token}}
+
+### 5. Capture (MANUAL capture mode; payment must be AUTHORIZED)
+###    200 CAPTURED | 202 UNKNOWN (provider timed out; verified automatically) | 422 provider refused | 503 provider down
+POST {{gw}}/api/v1/payments/{{paymentId}}/capture
+Authorization: Bearer {{token}}
+Idempotency-Key: 0b3e9a4c-5d61-4e7f-8a90-1c2d3e4f5a6b
+
+### 6. Cancel (not allowed once CAPTURED -> use a refund, Phase 5)
+POST {{gw}}/api/v1/payments/{{paymentId}}/cancel
+Authorization: Bearer {{token}}
+Idempotency-Key: 9a1c2b3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d
+Content-Type: application/json
+
+{ "reason": "Bill re-issued with corrected amount" }
+
+### Example error (409) when the patient paid moments before the cancel
+# { "type": "https://docs.hpg.example/errors/payment-already-captured", "status": 409,
+#   "errorCode": "PAYMENT_ALREADY_CAPTURED",
+#   "detail": "The patient has already paid; use a refund instead of cancelling.", "correlationId": "..." }

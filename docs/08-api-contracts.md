@@ -59,6 +59,13 @@ rejected with `422 LIMIT_EXCEEDS_PLATFORM_MAXIMUM`. A merchant can hold at most 
 | POST | `/checkout/{checkoutToken}/callback` | public, signature-verified | 200 | Browser callback after payment |
 | POST | `/webhooks/razorpay/payments` | public, signature-verified | 200 | Provider webhooks |
 
+| POST | `/checkout/{checkoutToken}/simulate` | public | 200 | **Simulated provider only** (404 otherwise) |
+| PUT | `/api/v1/admin/merchant-config-replicas/{merchantId}` | OPS | 200 | **TEMPORARY (Phase 3)**: seed payment-service's merchant replica; removed in Phase 4 |
+
+Capture answers **202** with status `UNKNOWN` when the provider did not respond in time; the payment is
+verified automatically and must not be captured again with a new key. Full samples:
+[samples/http/payment.http](../samples/http/payment.http).
+
 "Authorization" is not a merchant-callable endpoint: the **patient** authorizes the payment on the
 provider's checkout. The merchant observes it (`AUTHORIZED` status / webhook) and then captures.
 

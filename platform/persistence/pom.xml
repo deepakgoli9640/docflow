@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.hpg</groupId>
+        <artifactId>healthcare-payment-gateway</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>hpg-persistence</artifactId>
+    <name>HPG :: Platform :: Persistence</name>
+    <description>
+        JPA plumbing shared by services that own a database: audited base entity with optimistic locking,
+        AES-GCM column encryption, JPA auditing, UTC clock. Auto-configured. No entities of its own.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.hpg</groupId>
+            <artifactId>hpg-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

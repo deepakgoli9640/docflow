@@ -28,7 +28,7 @@ startup and less memory — fine locally, not for load tests or production.)
 | Profile | Starts |
 |---|---|
 | `infra` | postgres, kafka, redis |
-| `core` | api-gateway, merchant-service, payment-service |
+| `core` | api-gateway, merchant-service, payment-service (all three exist since Phase 3) |
 | `refund` | refund-service |
 | `ledger` | ledger-service |
 | `notify` | notification-service, mailpit |
@@ -53,8 +53,9 @@ hpg --profile "*" down
 hpg --profile "*" down -v
 ```
 
-Measured in Phase 2 (`docker stats`, idle after the smoke test): api-gateway 204 MiB,
-merchant-service 246 MiB, postgres 62 MiB, redis 5 MiB.
+Measured in Phase 3 (`docker stats` after both smoke tests): api-gateway 225 MiB, merchant-service
+272 MiB, payment-service 262 MiB, postgres 82 MiB, redis 5 MiB — about 850 MB for the `infra` + `core`
+profiles.
 
 **Recommended day-to-day workflow:** `infra` in Docker + one or two services from IntelliJ /
 `./mvnw -pl services/merchant-service spring-boot:run -Dspring-boot.run.profiles=local`. The `local`

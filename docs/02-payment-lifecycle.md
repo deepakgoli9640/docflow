@@ -99,6 +99,7 @@ stateDiagram-v2
 
     EXPIRED --> CAPTURED: provider evidence (late capture)
     CANCELLED --> CAPTURED: provider evidence (late capture)
+    FAILED --> CAPTURED: provider evidence (late capture)
 
     CAPTURED --> [*]
     FAILED --> [*]
@@ -111,8 +112,8 @@ stateDiagram-v2
    tagged with who may trigger it (`MERCHANT`, `PROVIDER_EVIDENCE`, `SYSTEM`). Anything else throws
    `InvalidPaymentStateTransitionException` → `409 Conflict` for API callers.
 2. **Provider-evidence override.** Money that the provider says moved, moved. If a capture is
-   confirmed (webhook or poll) for a payment we already marked `EXPIRED` or `CANCELLED` (a race
-   at the deadline), the payment moves to `CAPTURED` with `late_capture = true`, an alert metric
+   confirmed (webhook or poll) for a payment we already marked `EXPIRED`, `CANCELLED` or `FAILED` (a race
+   at the deadline, or a retry after the attempt budget was used), the payment moves to `CAPTURED` with `late_capture = true`, an alert metric
    fires, and the hospital is notified like any capture. The hospital then refunds through the
    normal refund API if it does not want the money. Internal state must converge to the provider's
    truth — the alternative (keeping `EXPIRED` while the patient's money sits with us) makes the
@@ -283,6 +284,30 @@ Scheduled jobs (ShedLock ensures one runner across replicas), every 60 s, small 
 All recovery calls go through a **separate bulkhead** from the live checkout path, so a backlog of
 recovery work can never starve patients who are trying to pay.
 
+## 8a. As implemented (Phase 3)
+
+- **Who may trigger what** is modelled as an `Authority` (MERCHANT, PROVIDER, SYSTEM) separate from the
+  `TransitionSource` stored in history (MERCHANT_API, PROVIDER_RESPONSE, CHECKOUT_CALLBACK,
+  PROVIDER_WEBHOOK, PROVIDER_POLL, SYSTEM). `PaymentStateMachineTest` checks all 9 × 9 × 3 = 243
+  combinations against an independently written table.
+- **Callback → immediate verification.** After accepting a signed callback (`PENDING → PROCESSING`), the
+  service immediately fetches the payment from the provider and applies that. If the fetch fails, the
+  payment stays PROCESSING and the webhook or the recovery job completes it.
+- **Successful evidence is applied first** when a poll returns several attempts, so failed attempts cannot
+  exhaust the attempt budget a moment before the capture is seen.
+- **Evidence for an attempt that belongs to another payment is refused** (logged as an error, counted in
+  `payments.evidence_conflicts`): provider ids are globally unique, so this signals bad data.
+- **Duplicate capture** (a second captured attempt on an already captured payment) is recorded on the
+  attempt (`duplicateCapture=true`), logged and counted — never auto-refunded.
+- **Daily limit and idempotency checks** run under a per-merchant PostgreSQL advisory lock
+  (`pg_advisory_xact_lock`), so concurrent creations cannot both pass "sum + amount ≤ limit".
+- **If anything fails after the payment row is committed** (e.g. provider order creation), the API still
+  answers 201 with status CREATED; recovery finishes it. A committed payment is never reported as an error.
+- **Checkout page**: server-rendered HTML with a per-response CSP nonce; only Razorpay's script may run.
+  Optional `returnUrl` (https) sends the patient back to the hospital with `paymentId` and `status`.
+- **Recovery jobs** (`PaymentJobs`, ShedLock, every minute): retry order creation, verify PROCESSING /
+  UNKNOWN / long-PENDING payments, expire after asking the provider, expire uncaptured authorizations.
+
 ## 9. Provider abstraction
 
 ```java
@@ -322,8 +347,9 @@ segregation: payment-service never needs refund calls and vice versa).
 
 ### Simulated provider (clearly labelled)
 
-A `SimulatedPaymentProvider` under Spring profile `provider-sim` lets the full flow run without
+A `SimulatedPaymentProvider`, enabled with `HPG_PAYMENT_PROVIDER=simulated` (property, not profile), lets the full flow run without
 Razorpay credentials or internet access. It logs `SIMULATED PROVIDER` on every call, has a fake
-checkout page, and can emit signed fake webhooks. It is **for local demos only** and is never
+checkout page with three buttons (success, failed attempt, and "success but lose the callback" to
+demonstrate recovery polling); it does not send webhooks. It is **for local demos only** and is never
 active unless that profile is explicitly enabled. Automated tests use **WireMock** with recorded
 Razorpay-shaped responses instead.

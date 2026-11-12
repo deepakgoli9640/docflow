@@ -105,9 +105,13 @@ erDiagram
         varchar customer_email_enc
         varchar customer_phone_enc
         varchar description
+        varchar return_url
         varchar checkout_token UK
+        int max_attempts
         timestamptz expires_at
+        timestamptz authorized_at
         timestamptz captured_at
+        timestamptz last_verified_at
         boolean late_capture
         varchar failure_code
         varchar failure_reason
@@ -145,8 +149,10 @@ erDiagram
         uuid payment_id FK
         varchar from_status
         varchar to_status
-        varchar trigger_source "API CALLBACK WEBHOOK RECOVERY"
+        varchar source "MERCHANT_API PROVIDER_RESPONSE CHECKOUT_CALLBACK PROVIDER_WEBHOOK PROVIDER_POLL SYSTEM"
         varchar reason
+        varchar causation_id
+        varchar actor
         timestamptz created_at
     }
 ```
@@ -158,7 +164,7 @@ Supporting tables in `payment_db`:
 | `idempotency_keys` | PK `(merchant_id, operation, idempotency_key)`, `request_hash`, `status`, `resource_id`, `response_status`, `expires_at` |
 | `outbox_events` | `id BIGINT identity`, `event_id UUID UK`, `aggregate_type`, `aggregate_id`, `event_type`, `topic`, `message_key`, `payload JSONB`, `headers JSONB`, `created_at`, `published_at`, `attempts`, `last_error` |
 | `webhook_inbox` | `provider_event_id UK`, `event_type`, `payload JSONB`, `received_at`, `processed_at`, `status`, `outcome` (`APPLIED` / `STALE_IGNORED` / `FAILED`) |
-| `merchant_config_replica` | `merchant_id PK`, status, limits, methods, capture mode, TTL, `snapshot_version` |
+| `merchant_config_replica` | `merchant_id PK`, display name, status, limits, methods, capture mode, TTL, max attempts, `snapshot_version` |
 | `processed_events` | PK `(consumer_group, event_id)` |
 | `shedlock` | ShedLock standard table |
 

@@ -9,7 +9,7 @@ import com.hpg.merchant.domain.Merchant;
 import com.hpg.merchant.domain.MerchantCredential;
 import com.hpg.merchant.domain.MerchantErrorCode;
 import com.hpg.merchant.infrastructure.config.MerchantProperties;
-import com.hpg.merchant.infrastructure.config.PersistenceConfig;
+import com.hpg.persistence.Actors;
 import com.hpg.merchant.infrastructure.persistence.MerchantCredentialRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -98,7 +98,7 @@ public class ApiKeyService {
             throw new BusinessException(MerchantErrorCode.LAST_ACTIVE_API_KEY,
                     "Create a replacement key before revoking the last active one.");
         }
-        credential.revoke(clock.instant(), PersistenceConfig.currentActor());
+        credential.revoke(clock.instant(), Actors.current());
         audit.record(merchantId, AuditAction.API_KEY_REVOKED, Map.of("apiKeyId", keyId));
     }
 

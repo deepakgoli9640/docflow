@@ -16,6 +16,19 @@ test proves it (test names are the plan for Phase 8; many are written earlier wi
 | 9 | **Refund exceeds captured amount** | Over-refund, including via concurrent partial refunds | Atomic conditional `UPDATE` reservation + DB `CHECK` constraint. | `RefundValidationTest` (unit), `ConcurrentPartialRefundsIT`: 10 parallel refunds of 30% each on one payment → exactly 3 succeed. |
 | 10 | **Settlement report has missing or duplicate transactions** | Silent money leakage | Matching engine statuses `MISSING_IN_PROVIDER`, `MISSING_IN_INTERNAL_SYSTEM`, `DUPLICATE`; duplicate file upload rejected by checksum; nothing auto-corrected. | `ReconciliationMatcherTest` (table-driven unit tests), `SettlementCsvIT` with sample files. |
 
+### Implemented so far (Phase 3)
+
+| # | Automated test(s) |
+|---|---|
+| 1 | `PaymentApiIT.Creation#concurrentRequestsWithTheSameKeyCreateExactlyOnePayment` (12 threads), `#sameIdempotencyKeyReplays…`, `#secondLivePaymentForTheSameBillIsRejected…`, `#secondCaptureOnTheSameOrderIsFlaggedAsDuplicateCharge` |
+| 2 | `RazorpayPaymentProviderTest#slowResponseIsATimeoutWithUnknownOutcome`, `#timedOutCaptureIsNeverRetried`, `#circuitOpensAfterRepeatedFailures…`; `PaymentApiIT.Lifecycle#captureTimeoutBecomesUnknownAndIsResolvedByVerification`, `Creation#providerOutageAtCreationLeavesPaymentCreatedAndRecoveryCompletesIt` |
+| 3 | `PaymentApiIT.Checkout#lostProviderResponseIsRecoveredByPolling`, `#paymentWithNoCallbackAndNoWebhookIsFoundByPolling`, `Lifecycle#expiryAsksTheProviderFirst`, `#captureAfterExpiryIsAppliedAndFlaggedAsLate`; `SimulatedProviderIT#lostCallbackIsRecoveredByPolling` |
+| 4 | `PaymentApiIT.Webhooks#duplicateWebhookIsAcknowledgedButProcessedOnce` |
+| 5 | `PaymentApiIT.Webhooks#outOfOrderWebhookDoesNotMoveThePaymentBackwards`; `PaymentStateMachineTest` |
+| 6, 7 | Phase 4 (Kafka). The outbox is already written in the same transaction (asserted in `PaymentApiIT`). |
+| 8 | `GlobalExceptionHandlerTest#databaseUnavailableIs503WithRetryAfter` (handler level); container-stop test in Phase 8 |
+| 9, 10 | Phases 5 and 6 |
+
 ## Recovery workflows (summary)
 
 | Stuck condition | Detected by | Recovery |
