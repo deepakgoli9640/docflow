@@ -12,8 +12,9 @@
     <artifactId>hpg-persistence</artifactId>
     <name>HPG :: Platform :: Persistence</name>
     <description>
-        JPA plumbing shared by services that own a database: audited base entity with optimistic locking,
-        AES-GCM column encryption, JPA auditing, UTC clock. Auto-configured. No entities of its own.
+        Database plumbing shared by services that own a database: audited base entity with optimistic
+        locking, AES-GCM column encryption, JPA auditing, UTC clock, and ShedLock-backed scheduling so a
+        job runs on one replica at a time. Auto-configured. No entities of its own.
     </description>
 
     <dependencies>
@@ -28,6 +29,14 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
         </dependency>
     </dependencies>
 </project>

@@ -60,7 +60,9 @@ rejected with `422 LIMIT_EXCEEDS_PLATFORM_MAXIMUM`. A merchant can hold at most 
 | POST | `/webhooks/razorpay/payments` | public, signature-verified | 200 | Provider webhooks |
 
 | POST | `/checkout/{checkoutToken}/simulate` | public | 200 | **Simulated provider only** (404 otherwise) |
-| PUT | `/api/v1/admin/merchant-config-replicas/{merchantId}` | OPS | 200 | **TEMPORARY (Phase 3)**: seed payment-service's merchant replica; removed in Phase 4 |
+
+The Phase 3 endpoint that seeded payment-service's merchant replica by hand is **gone**: merchant
+configuration now reaches payment-service as events.
 
 Capture answers **202** with status `UNKNOWN` when the provider did not respond in time; the payment is
 verified automatically and must not be captured again with a new key. Full samples:
@@ -148,6 +150,17 @@ Content-Type: application/problem+json
 }
 ```
 
+## 4a. Notification service (operations)
+
+| Method | Path | Role | Success | Purpose |
+|---|---|---|---|---|
+| GET | `/api/v1/admin/notifications?status=&merchantId=&page=&sort=` | OPS | 200 | What was sent, to whom, and how it went |
+| GET | `/api/v1/admin/notifications/{id}` | OPS | 200 | One notification with every delivery attempt |
+| POST | `/api/v1/admin/notifications/{id}/requeue` | OPS | 200 | Put a `DEAD` notification back in the queue after the hospital fixed its endpoint (409 for any other status) |
+
+Recipients are masked in these responses (`p*****t@example.com`): support needs to know which address
+was used, not the address itself.
+
 ## 5. Transaction & ledger service
 
 | Method | Path | Role | Success | Purpose |
@@ -210,7 +223,14 @@ X-HPG-Signature: v1=5c1f0e...   (hex HMAC-SHA256 of "<timestamp>.<raw body>" wit
             "status": "CAPTURED", "amount": {"amount":"20000.00","currency":"INR"} } }
 ```
 
-Hospital guidance (documented): verify signature, reject timestamps older than 5 minutes (replay
-protection), dedupe by `X-HPG-Event-Id`, use `sequence` to ignore stale updates, respond `2xx`
-within 10 s. We retry non-2xx with exponential backoff + jitter for up to 24 h, then mark the
-notification `DEAD` and emit `NotificationFailed`.
+Hospital guidance: verify the signature, reject timestamps older than 5 minutes (replay protection),
+deduplicate by `X-HPG-Event-Id`, use `X-HPG-Sequence` to ignore an update older than one already
+applied, and respond `2xx` within 10 s. A working receiver that does all of this in 60 lines is in
+[scripts/webhook-receiver.py](../scripts/webhook-receiver.py).
+
+What we do with the response: `2xx` is delivered; `410 Gone` stops us calling that endpoint again;
+anything else — including `401` and `404`, which usually mean a deployment in progress — is retried
+with exponential backoff and jitter for about a day (12 attempts). After that the notification is
+`DEAD`, a `NotificationFailed` event is published for alerting, and an operator can requeue it.
+A redirect is never followed and counts as a failure: following one would let whoever controls the
+hospital's DNS point our signed request at a host of their choosing.

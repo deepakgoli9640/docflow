@@ -1,0 +1,36 @@
+# Test-only values; they protect nothing outside throwaway containers.
+spring:
+  kafka:
+    # No broker in most tests: the Kafka tests start their own and override this.
+    bootstrap-servers: localhost:1
+    admin:
+      auto-create: false
+    listener:
+      auto-startup: false
+  mail:
+    host: localhost
+    port: 3025            # GreenMail, started by the tests that need it
+
+hpg:
+  outbox:
+    enabled: false        # the relay is driven directly from the tests
+  scheduling:
+    enabled: false
+  security:
+    jwk-set-uri: http://localhost:1/oauth2/jwks
+    issuer: http://localhost
+    encryption-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  notification:
+    merchant-service-uri: http://localhost:1
+    client-secret: test-notification-secret
+    allow-private-webhook-targets: false
+    retry-initial: 1s
+    retry-multiplier: 2.0
+    retry-max: 4s
+    max-attempts: 3
+    jobs:
+      enabled: false      # tests call the dispatcher directly
+
+logging:
+  level:
+    com.hpg: DEBUG

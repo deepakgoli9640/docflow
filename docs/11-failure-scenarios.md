@@ -25,9 +25,19 @@ test proves it (test names are the plan for Phase 8; many are written earlier wi
 | 3 | `PaymentApiIT.Checkout#lostProviderResponseIsRecoveredByPolling`, `#paymentWithNoCallbackAndNoWebhookIsFoundByPolling`, `Lifecycle#expiryAsksTheProviderFirst`, `#captureAfterExpiryIsAppliedAndFlaggedAsLate`; `SimulatedProviderIT#lostCallbackIsRecoveredByPolling` |
 | 4 | `PaymentApiIT.Webhooks#duplicateWebhookIsAcknowledgedButProcessedOnce` |
 | 5 | `PaymentApiIT.Webhooks#outOfOrderWebhookDoesNotMoveThePaymentBackwards`; `PaymentStateMachineTest` |
-| 6, 7 | Phase 4 (Kafka). The outbox is already written in the same transaction (asserted in `PaymentApiIT`). |
+| 6 | `KafkaOutageIT` (payment-service): with no broker, payments are still accepted (201), the event stays in the outbox with the failure recorded, and the backlog is visible in `outbox.pending.events`. `OutboxRelayIT#publishesOnePaymentsEventsInTheOrderTheyHappened` proves a backlog drains in the order it happened once Kafka is reachable. |
+| 7 | `EventConsumptionIT#aPaymentEventBecomesNotificationRowsAndARedeliveryAddsNothing` (notification-service): the same event id twice produces one message per recipient; `NotificationDeliveryIT#theSameEventTwiceProducesOneMessagePerRecipient`; `MerchantSnapshotConsumerIT#anOlderSnapshotNeverMovesTheReplicaBackwards`. |
 | 8 | `GlobalExceptionHandlerTest#databaseUnavailableIs503WithRetryAfter` (handler level); container-stop test in Phase 8 |
 | 9, 10 | Phases 5 and 6 |
+
+Also covered in Phase 4, beyond the required list:
+`EventConsumptionIT#anUnreadableEventIsDeadLetteredRatherThanBlockingThePartition` (poison message),
+`MerchantSnapshotConsumerIT#aSnapshotFromANewerProducerIsDeadLetteredRatherThanGuessedAt` (event
+versioning), `NotificationDeliveryIT#anEndpointThatKeepsFailingIsRetriedThenDeclaredDeadAndPublished`
+and `#aNotificationLeftSendingByACrashIsPickedUpAgain` (delivery retries and crash recovery),
+`MerchantAccessIT#aSuspendedMerchantIsRefusedEvenWithAValidToken` (edge revocation), and
+`ScheduledJobsWiringIT` — which exists because a real bug slipped past every other test
+(see [decisions](decisions.md), D43).
 
 ## Recovery workflows (summary)
 

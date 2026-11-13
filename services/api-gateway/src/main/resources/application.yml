@@ -6,6 +6,16 @@ server:
 spring:
   application:
     name: api-gateway
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      # The gateway keeps no state of its own: it rebuilds merchant status from the compacted topic.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    admin:
+      auto-create: false
+      fail-fast: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -85,6 +95,17 @@ spring:
                     key-resolver: "#{@ipKeyResolver}"
                     redis-rate-limiter.replenishRate: ${HPG_RATE_CHECKOUT_PER_SEC:10}
                     redis-rate-limiter.burstCapacity: ${HPG_RATE_CHECKOUT_BURST:20}
+            # --- notification-service ---------------------------------------------------
+            - id: notification-admin
+              uri: ${HPG_NOTIFICATION_SERVICE_URI:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/admin/notifications,/api/v1/admin/notifications/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_API_PER_SEC:50}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_API_BURST:100}
             - id: payment-webhooks
               uri: ${HPG_PAYMENT_SERVICE_URI:http://localhost:8082}
               predicates:

@@ -1,0 +1,60 @@
+### Healthcare Payment Gateway - notification delivery (Phase 4, OPS)
+### Prerequisites: the stack with the notify profile, and an OPS token (see merchant.http step 9):
+###   docker compose -f deploy/docker-compose.yml --profile infra --profile core --profile notify up -d
+
+@gw = http://localhost:8080
+
+### 1. What has been sent, and how it went
+GET {{gw}}/api/v1/admin/notifications?page=0&size=20&sort=createdAt,desc
+Authorization: Bearer {{opsToken}}
+
+### Example response
+# { "content": [
+#     { "id": "7c1d2e3f-...", "sourceEventId": "01933f7e-...", "eventType": "PaymentCaptured",
+#       "channel": "WEBHOOK", "recipientType": "MERCHANT",
+#       "recipient": "https://his.cityhospital.example/hpg/webhooks",
+#       "merchantId": "b1e7c3d2-...", "paymentId": "3f9c2a51-...", "sequenceNo": 4,
+#       "status": "DELIVERED", "attemptCount": 1, "deliveredAt": "2026-11-13T05:58:21Z" },
+#     { "channel": "EMAIL", "recipientType": "PATIENT", "recipient": "p*****t@example.com",
+#       "status": "DELIVERED", "attemptCount": 1 } ],
+#   "page": { "number": 0, "size": 20, "totalElements": 3, "totalPages": 1 } }
+# Patient addresses are masked: support needs to know which address was used, not the address.
+
+### 2. Only what is still failing (a hospital endpoint that is down)
+GET {{gw}}/api/v1/admin/notifications?status=RETRYING
+Authorization: Bearer {{opsToken}}
+
+### 3. Everything given up on (each one also published a NotificationFailed event)
+GET {{gw}}/api/v1/admin/notifications?status=DEAD
+Authorization: Bearer {{opsToken}}
+
+### 4. One notification with every delivery attempt
+GET {{gw}}/api/v1/admin/notifications/{{notificationId}}
+Authorization: Bearer {{opsToken}}
+
+### Example response
+# { "notification": { "status": "DEAD", "attemptCount": 12, "lastError": "endpoint returned 503" },
+#   "attempts": [
+#     { "attemptNo": 1,  "outcome": "RETRYABLE_FAILURE", "responseCode": 503, "durationMs": 102,
+#       "attemptedAt": "2026-11-13T06:00:00Z" },
+#     { "attemptNo": 12, "outcome": "RETRYABLE_FAILURE", "responseCode": 503, "durationMs": 98,
+#       "attemptedAt": "2026-11-14T05:40:00Z" } ] }
+# Attempt history is append-only (a database trigger refuses updates and deletes).
+
+### 5. Requeue after the hospital fixed its endpoint (409 unless the notification is DEAD)
+POST {{gw}}/api/v1/admin/notifications/{{notificationId}}/requeue
+Authorization: Bearer {{opsToken}}
+
+### ---------------- Receiving our webhooks (the hospital's side) -------------------------------
+### Run a receiver that verifies the signature exactly as documented:
+###   HPG_WEBHOOK_SECRET=whsec_... ./scripts/webhook-receiver.py 9099
+###
+### Each request carries:
+###   X-HPG-Event-Id    unique per event; deduplicate on it, because delivery is at least once
+###   X-HPG-Event-Type  e.g. payment.captured
+###   X-HPG-Timestamp   unix seconds; reject anything older than 5 minutes (replay protection)
+###   X-HPG-Signature   v1=<hex HMAC-SHA256 of "<timestamp>.<raw body>" with your webhook secret>
+###   X-HPG-Sequence    monotonic per payment; ignore an update older than one you have applied
+###
+### Respond 2xx when accepted. Anything else is retried with backoff for about a day; 410 Gone stops
+### delivery permanently. Verify over the RAW body: re-serialised JSON will not match the signature.

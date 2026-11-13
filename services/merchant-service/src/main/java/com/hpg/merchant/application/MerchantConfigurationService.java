@@ -28,14 +28,16 @@ public class MerchantConfigurationService {
     private final MerchantLookup lookup;
     private final MerchantProperties properties;
     private final WebhookUrlValidator webhookUrlValidator;
+    private final MerchantSnapshotPublisher snapshots;
     private final AuditLogger audit;
 
     public MerchantConfigurationService(MerchantConfigurationRepository configurations, MerchantLookup lookup,
-            MerchantProperties properties, AuditLogger audit) {
+            MerchantProperties properties, MerchantSnapshotPublisher snapshots, AuditLogger audit) {
         this.configurations = configurations;
         this.lookup = lookup;
         this.properties = properties;
         this.webhookUrlValidator = new WebhookUrlValidator(properties.allowInsecureWebhooks());
+        this.snapshots = snapshots;
         this.audit = audit;
     }
 
@@ -49,10 +51,12 @@ public class MerchantConfigurationService {
     @PreAuthorize("hasRole('MERCHANT')")
     @Transactional
     public MerchantConfiguration update(UUID merchantId, PaymentSettings settings) {
-        lookup.require(merchantId).requireNotDeactivated();
+        var merchant = lookup.require(merchantId);
+        merchant.requireNotDeactivated();
         validate(settings);
         MerchantConfiguration configuration = require(merchantId);
         configuration.apply(settings);
+        snapshots.publish(merchant);
         audit.record(merchantId, AuditAction.CONFIGURATION_UPDATED, Map.of(
                 "captureMode", settings.captureMode().name(),
                 "enabledMethods", settings.enabledMethods().stream().map(Enum::name).sorted().toList(),

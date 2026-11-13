@@ -4,8 +4,10 @@
 #   docker compose -f deploy/docker-compose.yml --profile infra up -d                 # Postgres + Redis
 #   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d  # + gateway, merchant, payment
 #
+#   docker compose -f deploy/docker-compose.yml --profile infra --profile core --profile notify up -d
+#
 # Prerequisites:  ./scripts/init-env.sh   and   ./mvnw -DskipTests package
-# Kafka joins the infra profile in Phase 4; observability (Prometheus/Grafana/Jaeger) arrives in Phase 7.
+# Observability (Prometheus/Grafana/Jaeger) arrives in Phase 7.
 
 name: hpg
 
@@ -28,6 +30,41 @@ services:
       retries: 20
     mem_limit: 384m
 
+  kafka:
+    image: apache/kafka:3.9.1
+    profiles: [infra]
+    environment:
+      # Single-node KRaft: broker and controller in one process, no ZooKeeper. Fine for a laptop;
+      # production would run three brokers with replication factor 3 and min.insync.replicas 2.
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      # Two advertised listeners: containers reach the broker as kafka:9092, while a service you run from
+      # the IDE reaches the same broker as localhost:29092. A client always connects to the address the
+      # broker advertises, so one listener cannot serve both.
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_HEAP_OPTS: -Xmx512m -Xms256m
+    ports:
+      - "127.0.0.1:29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      start_period: 40s
+      retries: 12
+    mem_limit: 900m
+
   redis:
     image: redis:7-alpine
     profiles: [infra]
@@ -42,6 +79,18 @@ services:
       retries: 20
     mem_limit: 96m
 
+  mailpit:
+    # A real SMTP server with a web inbox at http://localhost:8025, so patient email can be seen
+    # end to end without sending anything to a real address.
+    image: axllent/mailpit:latest
+    profiles: [notify]
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+    mem_limit: 96m
+
   merchant-service:
     profiles: [core]
     build: ../services/merchant-service
@@ -51,11 +100,14 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       MERCHANT_DB_HOST: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       HPG_TOKEN_ISSUER: http://merchant-service:8081
     ports:
       - "127.0.0.1:8081:8081"   # published for debugging only; clients go through the gateway
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health/readiness || exit 1"]
@@ -74,6 +126,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       PAYMENT_DB_HOST: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_TOKEN_ISSUER: http://merchant-service:8081
       HPG_CHECKOUT_BASE_URL: http://localhost:8080/checkout
@@ -82,8 +135,45 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 10
+    mem_limit: 512m
+
+  notification-service:
+    profiles: [notify]
+    build: ../services/notification-service
+    image: hpg/notification-service:local
+    env_file: ./env/.env
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      NOTIFICATION_DB_HOST: postgres
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
+      HPG_TOKEN_ISSUER: http://merchant-service:8081
+    # Local development only: lets a webhook reach a receiver running on your machine, which is how
+    # scripts/smoke-test-phase4.sh shows a hospital verifying our signature.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health/readiness || exit 1"]
       interval: 10s
       timeout: 3s
       start_period: 60s
@@ -99,8 +189,10 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_PAYMENT_SERVICE_URI: http://payment-service:8082
+      HPG_NOTIFICATION_SERVICE_URI: http://notification-service:8085
       HPG_TOKEN_ISSUER: http://merchant-service:8081
     ports:
       - "127.0.0.1:8080:8080"
@@ -121,3 +213,4 @@ services:
 
 volumes:
   postgres-data:
+  kafka-data:

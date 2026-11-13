@@ -1,7 +1,20 @@
 # Test-only values. These secrets protect nothing outside a throwaway Testcontainers database.
+spring:
+  kafka:
+    # No broker in most tests: the Kafka tests start their own and override this.
+    bootstrap-servers: localhost:1
+    admin:
+      auto-create: false
+    listener:
+      auto-startup: false
+
 hpg:
   merchant:
     allow-insecure-webhooks: false
+  outbox:
+    enabled: false       # the relay is driven directly from the tests, never by a timer
+  scheduling:
+    enabled: false
   security:
     issuer: http://localhost
     encryption-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
@@ -12,6 +25,7 @@ hpg:
       - client-id: notification-service
         client-secret: test-notification-secret
         roles: [SERVICE]
+
 logging:
   level:
     com.hpg: DEBUG

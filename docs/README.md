@@ -1,7 +1,7 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phase 3 complete** (payment-service, state machine, idempotency, provider integration).
-> Phases 4–8 are still design. The table at the bottom says exactly what runs today.
+> Status: **Phase 4 complete** (Kafka, transactional outbox relay, merchant replication,
+> notification-service). Phases 5–8 are still design. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
 > before code relies on it.
@@ -35,6 +35,7 @@ contact details.
 | 12 | [Deployment & local dev](12-deployment-local-dev.md) | Docker Compose profiles for an 8 GB laptop, CI/CD |
 | 13 | [Implementation plan](13-implementation-plan.md) | Phases 2–8, deliverables, exit criteria |
 | — | [Decision log](decisions.md) | Every significant decision, the alternatives, and why |
+| — | [Event catalogue](events/README.md) | Every Kafka event, with examples captured from the running system |
 | — | [Razorpay sandbox checklist](razorpay-sandbox-checklist.md) | What still has to be verified against the real Razorpay sandbox |
 
 ## Implemented vs simulated
@@ -67,6 +68,15 @@ designed but not built.
 | Razorpay adapter (orders, payments, capture, signatures, error mapping, timeouts) | **Real code, tested against WireMock only** | **Not yet run against the Razorpay sandbox** (no test keys). See [checklist](razorpay-sandbox-checklist.md). |
 | Resilience4j: circuit breaker, retry with jittered backoff, separate live/recovery bulkheads | **Real** | |
 | Simulated payment provider (`HPG_PAYMENT_PROVIDER=simulated`) | **Simulated** | In-memory, for local demos only; clearly labelled on the checkout page and in logs |
-| Outbox events (PaymentInitiated/Authorized/Captured/Failed/Cancelled/Expired) | **Written to outbox table** | Not yet published — Kafka relay arrives in Phase 4 |
-| Merchant config replica in payment-service | **Real table, seeded manually** | TEMPORARY OPS endpoint until merchant events feed it (Phase 4) |
-| Refunds, ledger, notifications, reconciliation | **Not yet** | Phases 4–6 |
+| Outbox events (PaymentInitiated/Authorized/Captured/Failed/Cancelled/Expired) | **Real** | Written in the business transaction and published to Kafka by the relay |
+| Transactional outbox relay: ordered publishing, backlog metrics, cleanup, single runner (ShedLock) | **Real** | Phase 4 |
+| Merchant snapshots published by merchant-service on a compacted topic | **Real** | The Phase 3 seeding endpoint is gone |
+| Merchant config replicas in payment-service and notification-service | **Real** | Built from events; version-ordered so replays cannot move them backwards |
+| Gateway deny-list: a suspended merchant's existing token is refused at the edge | **Real** | Fed by the same snapshots, kept in Redis, fail-open ([09 §2.1](09-security.md)) |
+| Consumer deduplication (`processed_events`), dead-letter topics with original bytes, jittered blocking retries | **Real** | Phase 4 |
+| notification-service: intake, delivery tracking, retries over ~a day, dead notifications, ops requeue | **Real** | Phase 4 |
+| Hospital webhooks: HMAC-SHA256 over `timestamp.body`, replay window, sequence number, SSRF guard at delivery | **Real** | `scripts/webhook-receiver.py` verifies them the way a hospital would |
+| Patient email | **Real (SMTP)** | Mailpit locally — a real SMTP server with a web inbox |
+| Patient SMS | **Simulated** | `LoggingSmsSender`: logs, never sends; says SIMULATED at startup and per message |
+| `NotificationFailed` events for alerting | **Real** | Published through the outbox when a notification is given up on |
+| Refunds, ledger, reconciliation | **Not yet** | Phases 5–6 |

@@ -22,6 +22,12 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    admin:
+      # Local convenience only; in production topics are created deliberately by operations.
+      auto-create: ${HPG_KAFKA_AUTO_CREATE_TOPICS:true}
+      fail-fast: false
   data:
     web:
       pageable:
@@ -37,6 +43,10 @@ spring:
       write-dates-as-timestamps: false
 
 hpg:
+  outbox:
+    enabled: true
+    interval: PT1S
+    batch-size: 100
   security:
     issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
     access-token-ttl: 15m

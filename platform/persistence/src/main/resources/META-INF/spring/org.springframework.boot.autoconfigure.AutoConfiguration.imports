@@ -1,1 +1,2 @@
 com.hpg.persistence.PersistenceSupportAutoConfiguration
+com.hpg.persistence.scheduling.SchedulingSupportAutoConfiguration

@@ -79,6 +79,18 @@ public class OutboxEvent {
         this.createdAt = createdAt;
     }
 
+    /** Marks the event as sent to Kafka. Called by the relay after the broker acknowledged it. */
+    void markPublished(Instant when) {
+        this.publishedAt = when;
+        this.lastError = null;
+    }
+
+    /** Records a failed publish attempt; the row stays unpublished and is retried on the next run. */
+    void recordFailure(String error) {
+        this.attempts++;
+        this.lastError = error == null ? null : error.substring(0, Math.min(1000, error.length()));
+    }
+
     public Long getId() {
         return id;
     }

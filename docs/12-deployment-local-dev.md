@@ -27,11 +27,11 @@ startup and less memory — fine locally, not for load tests or production.)
 
 | Profile | Starts |
 |---|---|
-| `infra` | postgres, kafka, redis |
+| `infra` | postgres, kafka (KRaft, single node), redis |
 | `core` | api-gateway, merchant-service, payment-service (all three exist since Phase 3) |
 | `refund` | refund-service |
 | `ledger` | ledger-service |
-| `notify` | notification-service, mailpit |
+| `notify` | notification-service, mailpit (real SMTP + inbox at http://localhost:8025) |
 | `recon` | reconciliation-service |
 | `obs` | prometheus, grafana, jaeger |
 | `tools` | kafka-ui (optional, ~250 MB) |
@@ -42,20 +42,35 @@ alias hpg='docker compose -f deploy/docker-compose.yml'   # convenience
 # Infra only; run the service you are working on from the IDE (recommended)
 hpg --profile infra up -d
 
-# Gateway + merchant-service in Docker as well (Phase 2: measured ~550 MB for the whole stack)
-./mvnw -DskipTests package
+# Gateway, merchant-service and payment-service in Docker as well
+./mvnw -DskipTests clean package
 hpg --profile infra --profile core up -d --build
 
-# Later phases add: --profile refund --profile ledger --profile notify --profile recon --profile obs
+# Add notifications (notification-service + Mailpit)
+hpg --profile infra --profile core --profile notify up -d --build
+
+# Later phases add: --profile refund --profile ledger --profile recon --profile obs
 
 # Stop everything, keep data / wipe data
 hpg --profile "*" down
 hpg --profile "*" down -v
 ```
 
-Measured in Phase 3 (`docker stats` after both smoke tests): api-gateway 225 MiB, merchant-service
-272 MiB, payment-service 262 MiB, postgres 82 MiB, redis 5 MiB — about 850 MB for the `infra` + `core`
-profiles.
+Measured in Phase 4 (`docker stats`, idle after the smoke tests), `infra` + `core` + `notify`:
+kafka 362 MiB, notification-service 279 MiB, payment-service 267 MiB, merchant-service 261 MiB,
+api-gateway 204 MiB, postgres 102 MiB, mailpit 21 MiB, redis 5 MiB — about **1.5 GB** in total.
+Leave out `--profile notify` and it is about 1.2 GB.
+
+**Use `clean package`, not `package`.** When only a shared module (`platform/*`) changes, Maven leaves
+the services' existing fat jars in place, and the Docker image then ships a stale copy of the shared
+code. This cost an hour of confusion in Phase 4; `clean` makes it impossible. For the same reason, run
+tests from the repository root (`./mvnw verify`) rather than inside one service directory: a single
+module resolves `platform/*` from your local Maven repository, which may be older than your working
+copy.
+
+**Two Kafka listeners.** Containers reach the broker as `kafka:9092`; a service you run from the IDE
+reaches the same broker as `localhost:29092` (set `KAFKA_BOOTSTRAP_SERVERS` in `deploy/env/.env`).
+A Kafka client always connects to the address the broker advertises, so one listener cannot serve both.
 
 **Recommended day-to-day workflow:** `infra` in Docker + one or two services from IntelliJ /
 `./mvnw -pl services/merchant-service spring-boot:run -Dspring-boot.run.profiles=local`. The `local`

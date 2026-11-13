@@ -164,7 +164,7 @@ Supporting tables in `payment_db`:
 | `idempotency_keys` | PK `(merchant_id, operation, idempotency_key)`, `request_hash`, `status`, `resource_id`, `response_status`, `expires_at` |
 | `outbox_events` | `id BIGINT identity`, `event_id UUID UK`, `aggregate_type`, `aggregate_id`, `event_type`, `topic`, `message_key`, `payload JSONB`, `headers JSONB`, `created_at`, `published_at`, `attempts`, `last_error` |
 | `webhook_inbox` | `provider_event_id UK`, `event_type`, `payload JSONB`, `received_at`, `processed_at`, `status`, `outcome` (`APPLIED` / `STALE_IGNORED` / `FAILED`) |
-| `merchant_config_replica` | `merchant_id PK`, display name, status, limits, methods, capture mode, TTL, max attempts, `snapshot_version` |
+| `merchant_config_replica` | `merchant_id PK`, display name, status, limits, methods, capture mode, TTL, max attempts, `snapshot_version` (a snapshot not newer than the stored one is ignored, so replays are harmless) |
 | `processed_events` | PK `(consumer_group, event_id)` |
 | `shedlock` | ShedLock standard table |
 
@@ -294,13 +294,14 @@ erDiagram
         uuid id PK
         uuid source_event_id
         varchar event_type
+        bigint sequence_no
         varchar channel "WEBHOOK EMAIL SMS"
         varchar recipient_type "MERCHANT PATIENT OPS"
         varchar recipient_enc
         uuid merchant_id
         uuid payment_id
         jsonb payload
-        varchar status "PENDING SENDING DELIVERED FAILED DEAD"
+        varchar status "PENDING SENDING DELIVERED RETRYING DEAD SKIPPED"
         int attempt_count
         timestamptz next_attempt_at
         varchar last_error
@@ -321,8 +322,11 @@ erDiagram
 ```
 
 `UNIQUE (source_event_id, channel, recipient_type)` — the same event can never produce two webhooks
-or two emails to the same party, even if the event is consumed twice. Plus
-`merchant_notification_replica`, `processed_events`, `outbox_events`, `shedlock`.
+or two emails to the same party, even if the event is consumed twice. `notification_attempts` is
+append-only (database trigger): it is the evidence of what a hospital was told and when.
+`sequence_no` carries the payment's version to the hospital, so it can ignore an update older than one
+it has already applied. Plus `merchant_notification_replica`, `processed_events`, `outbox_events`,
+`shedlock`.
 
 ## 8. recon_db
 
@@ -392,7 +396,7 @@ Plus `internal_transactions` (replica of ledger transactions: `transaction_ref`,
 
 | Requested | Present | Notes |
 |---|---|---|
-| merchants, merchant_credentials, merchant_configurations | ✅ | + `merchant_audit_log` |
+| merchants, merchant_credentials, merchant_configurations | ✅ | + `merchant_audit_log`, `outbox_events`, `shedlock`, and `merchants.snapshot_version` |
 | payment_orders, payments, payment_attempts, idempotency_keys, outbox_events | ✅ | + `payment_status_history`, `webhook_inbox`, `merchant_config_replica` |
 | refunds, refund_attempts, refund_outbox_events | ✅ | + `refundable_payments`, `idempotency_keys`, `webhook_inbox` |
 | transactions, ledger_accounts, ledger_entries | ✅ | |

@@ -10,6 +10,13 @@ public final class Topics {
     public static final String RECONCILIATION_EVENTS = "reconciliation.events.v1";
     public static final String NOTIFICATION_EVENTS = "notification.events.v1";
 
+    /** Suffix Spring and our own recoverer use for dead letters. */
+    public static final String DLT_SUFFIX = ".dlt";
+
+    public static String deadLetterOf(String topic) {
+        return topic + DLT_SUFFIX;
+    }
+
     private Topics() {
     }
 }

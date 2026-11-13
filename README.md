@@ -7,10 +7,10 @@ part of a bill. It handles payments, refunds, the ledger, notifications and reco
 Java 21 · Spring Boot 3.5 · Spring Cloud Gateway · Spring Security / Authorization Server ·
 PostgreSQL · Flyway · Kafka (Phase 4) · Redis · Testcontainers · Docker Compose
 
-> **Status: Phase 3 of 8 complete** — gateway, merchant-service and payment-service (state machine,
-> idempotency, checkout, webhooks, recovery). The Razorpay adapter is tested against WireMock; it has
-> **not yet run against the real sandbox** (no test keys) — local demos use a clearly labelled simulated
-> provider. See [what is implemented](docs/README.md#implemented-vs-simulated) and the
+> **Status: Phase 4 of 8 complete** — gateway, merchant-service, payment-service and
+> notification-service, connected by Kafka through a transactional outbox. The Razorpay adapter is
+> tested against WireMock; it has **not yet run against the real sandbox** (no test keys), and local
+> demos use a clearly labelled simulated provider. Patient SMS is simulated; patient email is real SMTP. See [what is implemented](docs/README.md#implemented-vs-simulated) and the
 > [implementation plan](docs/13-implementation-plan.md).
 
 ## Documentation
@@ -30,6 +30,7 @@ platform/event-contracts/    Event envelope, payment event types, topic names
 platform/messaging/          Transactional outbox writer (Kafka relay in Phase 4)
 services/merchant-service/   Hospital onboarding, API keys, configuration, OAuth2 token issuer
 services/payment-service/    Payments, state machine, idempotency, Razorpay adapter, checkout, webhooks, recovery
+services/notification-service/ Hospital webhooks (signed), patient email/SMS, delivery tracking, retries
 deploy/docker-compose.yml    Local environment, split into profiles
 deploy/postgres/init/        One database + one locked-down user per service
 deploy/env/.env.example      Every setting/secret the stack reads (copy via scripts/init-env.sh)
@@ -53,9 +54,9 @@ docs/                        Architecture documentation
 # 2. Build and run all tests (unit + Testcontainers integration tests; Docker must be running)
 ./mvnw verify
 
-# 3a. Run everything in Docker (~850 MB RAM in total)
-./mvnw -DskipTests package
-docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d --build
+# 3a. Run everything in Docker (~1.5 GB RAM in total; use `clean package`, see note below)
+./mvnw -DskipTests clean package
+docker compose -f deploy/docker-compose.yml --profile infra --profile core --profile notify up -d --build
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
 docker compose -f deploy/docker-compose.yml --profile infra up -d
@@ -64,8 +65,9 @@ docker compose -f deploy/docker-compose.yml --profile infra up -d
 #    (in the IDE: run MerchantServiceApplication / ApiGatewayApplication with active profile "local")
 
 # 4. Exercise the flows through the gateway (uses the SIMULATED provider by default)
-./scripts/smoke-test-phase2.sh
-./scripts/smoke-test-phase3.sh
+./scripts/smoke-test-phase2.sh    # onboarding, tokens, configuration, suspension
+./scripts/smoke-test-phase3.sh    # payments, idempotency, checkout, capture, cancel
+./scripts/smoke-test-phase4.sh    # events: snapshot replication, signed webhook, patient email
 
 # Stop (add -v to also delete the database volume)
 docker compose -f deploy/docker-compose.yml --profile '*' down
@@ -76,10 +78,16 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | http://localhost:8080 | API gateway (the only entry point clients use) |
 | http://localhost:8081/swagger-ui.html | merchant-service OpenAPI / Swagger UI |
 | http://localhost:8082/swagger-ui.html | payment-service OpenAPI / Swagger UI |
+| http://localhost:8025 | Mailpit inbox — patient email, as actually sent over SMTP |
+| http://localhost:8085/swagger-ui.html | notification-service (operations API) |
 | http://localhost:8080/checkout/{token} | Hosted checkout page (the `checkoutUrl` of a payment) |
 
-Run a single module's tests: `./mvnw -pl services/merchant-service -am verify`.
-Unit tests only (no Docker): `./mvnw test`.
+Run a single module's tests: `./mvnw -pl services/merchant-service -am verify` (the `-am` matters: it
+rebuilds the shared `platform/*` modules, which a bare `-pl` would take from your local Maven
+repository). Unit tests only (no Docker): `./mvnw test`.
+
+**Always `clean package` before building images.** When only a `platform/*` module changes, Maven
+leaves the services' fat jars untouched and the image ships stale shared code.
 
 ## Try it by hand
 

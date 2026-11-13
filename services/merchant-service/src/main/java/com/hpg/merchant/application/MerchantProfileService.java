@@ -18,10 +18,12 @@ import java.util.UUID;
 public class MerchantProfileService {
 
     private final MerchantLookup lookup;
+    private final MerchantSnapshotPublisher snapshots;
     private final AuditLogger audit;
 
-    public MerchantProfileService(MerchantLookup lookup, AuditLogger audit) {
+    public MerchantProfileService(MerchantLookup lookup, MerchantSnapshotPublisher snapshots, AuditLogger audit) {
         this.lookup = lookup;
+        this.snapshots = snapshots;
         this.audit = audit;
     }
 
@@ -44,6 +46,8 @@ public class MerchantProfileService {
             changed.put("contactPhone", "changed"); // PII: record that it changed, not the value
         }
         audit.record(merchantId, AuditAction.PROFILE_UPDATED, changed);
+        // The display name is shown to patients on the checkout page, so payment-service needs it.
+        snapshots.publish(merchant);
         return merchant;
     }
 }

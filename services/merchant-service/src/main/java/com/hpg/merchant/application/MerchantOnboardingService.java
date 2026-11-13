@@ -32,16 +32,18 @@ public class MerchantOnboardingService {
     private final MerchantLookup lookup;
     private final ApiKeyService apiKeys;
     private final MerchantConfigurationService configurationService;
+    private final MerchantSnapshotPublisher snapshots;
     private final AuditLogger audit;
 
     public MerchantOnboardingService(MerchantRepository merchants, MerchantConfigurationRepository configurations,
             MerchantLookup lookup, ApiKeyService apiKeys, MerchantConfigurationService configurationService,
-            AuditLogger audit) {
+            MerchantSnapshotPublisher snapshots, AuditLogger audit) {
         this.merchants = merchants;
         this.configurations = configurations;
         this.lookup = lookup;
         this.apiKeys = apiKeys;
         this.configurationService = configurationService;
+        this.snapshots = snapshots;
         this.audit = audit;
     }
 
@@ -68,6 +70,7 @@ public class MerchantOnboardingService {
                 webhookSecret));
         IssuedApiKey apiKey = apiKeys.issueForNewMerchant(merchant.getId());
         audit.record(merchant.getId(), AuditAction.MERCHANT_REGISTERED, Map.of("apiKeyId", apiKey.keyId()));
+        snapshots.publish(merchant);
         log.info("Merchant registered merchantId={}", merchant.getId());
         return new RegistrationResult(merchant, apiKey, webhookSecret);
     }
@@ -117,6 +120,7 @@ public class MerchantOnboardingService {
             details.put("reason", reason);
         }
         audit.record(merchantId, AuditAction.MERCHANT_STATUS_CHANGED, details);
+        snapshots.publish(merchant);
         log.info("Merchant status changed merchantId={} from={} to={}", merchantId, from, target);
         return merchant;
     }

@@ -1,5 +1,18 @@
 # Test-only values; they protect nothing outside throwaway containers.
+spring:
+  kafka:
+    # No broker in most tests: the Kafka tests start their own and override this.
+    bootstrap-servers: localhost:1
+    admin:
+      auto-create: false
+    listener:
+      auto-startup: false
+
 hpg:
+  outbox:
+    enabled: false       # the relay is driven directly from the tests, never by a timer
+  scheduling:
+    enabled: false
   security:
     jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
     issuer: http://localhost

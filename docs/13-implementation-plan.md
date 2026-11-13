@@ -57,7 +57,20 @@ Delivered as planned, with these differences:
 - **Exit:** a real Razorpay **test-mode** payment completed through the checkout page (if you
   provide sandbox keys), or the simulator flow, with the difference stated.
 
-## Phase 4 — Kafka, outbox, notification-service
+## Phase 4 — Kafka, outbox, notification-service ✅ done
+
+Delivered as planned, with these differences:
+- **Non-blocking retry topics were dropped** for notification intake; the long retries live in the
+  database instead (see [06 §6](06-kafka-events.md)). One retry mechanism fewer.
+- **Dead-lettering is ours, not Spring's**, so the original bytes reach the dead-letter topic and a
+  record that failed to parse can still be replayed.
+- **ShedLock moved into `platform/persistence`** (it is database-backed locking) and now serves every
+  service with scheduled work, instead of being configured per service.
+- **Added**: the gateway deny-list that Phase 2 deferred, a small operations API for notification
+  delivery, and `scripts/webhook-receiver.py` — a hospital-side verifier used by the smoke test.
+- **Not built**: `kafka-ui` in a `tools` profile. The admin API plus `docker exec … kafka-topics.sh`
+  cover inspection, and the container costs ~250 MB on an 8 GB laptop.
+- Tests: 497 in the repository (370 unit, 127 integration).
 
 - `platform/event-contracts`, `platform/messaging` (outbox relay, idempotent consumer helper,
   error handlers, DLT config).

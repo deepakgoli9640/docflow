@@ -1,1 +1,2 @@
 com.hpg.messaging.outbox.OutboxAutoConfiguration
+com.hpg.messaging.config.KafkaSupportAutoConfiguration

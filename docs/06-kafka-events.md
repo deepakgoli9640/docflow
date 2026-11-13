@@ -96,8 +96,8 @@ reading the topic from the beginning; Kafka keeps only the latest snapshot per m
   `FAIL_ON_UNKNOWN_PROPERTIES = false`, so producers can add fields first.
 - Breaking change → new `eventVersion` and, if consumers cannot handle both, a new topic
   (`payment.events.v2`) with a dual-publish period.
-- Contracts live in `platform/event-contracts` as Java records, and each event has a JSON example
-  in `docs/events/` used by contract tests.
+- Contracts live in `platform/event-contracts` as Java records, and every event has a worked example
+  in [docs/events/](events/README.md), captured from the running system.
 - Why JSON and not Avro + Schema Registry: one less container on an 8 GB laptop and human-readable
   messages while learning. Avro/Protobuf with a registry and compatibility checks is the production
   recommendation and is listed in the decision log.
@@ -118,8 +118,12 @@ flowchart LR
 - The relay preserves order: it processes rows by `id` (a sequence), and if sending a row fails it
   **stops the batch** rather than skipping ahead, so later events for the same payment are never
   published before earlier ones.
-- One active relay per service (ShedLock). Throughput is plenty for this system; with higher volume,
-  rows can be sharded by `hash(aggregate_id) % N` across N relays without breaking per-key order.
+- One active relay per service (ShedLock). Each event is sent and acknowledged before the next is sent,
+  and the batch stops at the first failure, so a later event for an aggregate can never overtake an
+  earlier one. That costs a round trip per event; with higher volume the options are sharding rows by
+  `hash(aggregate_id) % N` across N relays, or moving to CDC. The relay holds its database transaction
+  across the sends (to claim rows `FOR UPDATE SKIP LOCKED` and mark them published atomically), which is
+  bounded by a short send timeout and the stop-on-first-failure rule.
 - Published rows are deleted by a cleanup job after 7 days (outbox rows are transport, not records —
   the business tables and the ledger are the records).
 - If Kafka is down, rows accumulate; the API keeps working; the relay drains the backlog when Kafka
@@ -135,20 +139,27 @@ flowchart LR
 | refund-service `refund-payment-replica` | payment.events.v1 (`PaymentCaptured`) | `refundable_payments` | blocking |
 | refund-service `refund-merchant-replica` | merchant.snapshots.v1 | merchant status/limits | blocking |
 | ledger-service `ledger-posting` | payment.events.v1, refund.events.v1 | postings | **blocking** (order matters) |
-| notification-service `notification-intake` | payment, refund, reconciliation events | create notification rows | non-blocking retry topics |
+| notification-service `notification-service-payment-events` | payment.events.v1 | create notification rows | blocking |
 | notification-service `notification-merchant-replica` | merchant.snapshots.v1 | webhook URL, preferences | blocking |
 | reconciliation-service `recon-internal-txns` | ledger.events.v1 | `internal_transactions` | blocking |
 
 - **Blocking retry** (`DefaultErrorHandler` + `ExponentialBackOffWithMaxRetries`, jittered): the
   partition waits while the record is retried. Used where **order matters** (ledger, replicas).
-- **Non-blocking retry** (`@RetryableTopic` with retry topics, backoff 1 s → 2 s → 4 s … with
-  `random = true` for jitter): the failed record moves to a retry topic and the partition keeps
-  flowing. Used where order does not matter (notification intake).
+- **Non-blocking retry topics are not used.** The plan in Phase 1 was to use them for notification
+  intake. They turned out to be unnecessary: the consumer only *creates* notification rows, which is
+  fast and fails only if the database or the merchant replica is unavailable — both worth waiting for.
+  The retries that genuinely span hours (delivering a webhook to a hospital) never happen on a Kafka
+  thread at all; they are a `next_attempt_at` column in `notifications`. One retry mechanism fewer,
+  and the long-running one is visible and queryable in SQL.
 - **Not retried:** deserialisation errors and validation errors (poison pills) go straight to
   `<topic>.dlt` — retrying cannot fix them.
-- **DLT handling:** every DLT has a metric and an alert. Ops can inspect and replay via an admin
-  endpoint per service (`POST /api/v1/admin/dlt/{topic}/replay`, Phase 8 stretch) — replay is
-  safe because consumers are idempotent.
+- **DLT handling:** every DLT has a metric (`kafka_dlt_records_total`) and an alert. Dead-lettering is
+  done by our own `DeadLetterRecoverer` rather than Spring's `DeadLetterPublishingRecoverer`, for two
+  reasons: the **original bytes** are forwarded (so a record that failed to parse can still be read and
+  replayed exactly as it arrived), and the dead-letter path carries one value type instead of depending
+  on a serializer per failure kind. Headers record the original topic, partition, offset, the service
+  that gave up, and the exception. A replay tool is a Phase 8 stretch; replay is safe because consumers
+  deduplicate.
 
 ### Consumer idempotency
 

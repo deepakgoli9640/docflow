@@ -28,6 +28,7 @@
         <module>platform/messaging</module>
         <module>services/merchant-service</module>
         <module>services/payment-service</module>
+        <module>services/notification-service</module>
         
         <module>services/api-gateway</module>
     </modules>
@@ -45,6 +46,7 @@
         <resilience4j.version>2.4.0</resilience4j.version>
         <!-- 6.x is the line for Spring Framework 6 / Boot 3; 7.x targets Spring Framework 7. -->
         <shedlock.version>6.10.0</shedlock.version>
+        <greenmail.version>2.1.15</greenmail.version>
     </properties>
 
     <dependencyManagement>
@@ -112,6 +114,11 @@
                 <groupId>org.wiremock</groupId>
                 <artifactId>wiremock-standalone</artifactId>
                 <version>${wiremock.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.icegreen</groupId>
+                <artifactId>greenmail-junit5</artifactId>
+                <version>${greenmail.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -12,8 +12,9 @@
     <artifactId>hpg-messaging</artifactId>
     <name>HPG :: Platform :: Messaging</name>
     <description>
-        Transactional outbox: services append events in the same database transaction as their business
-        change. Phase 3 writes the outbox; the Kafka relay and idempotent consumers arrive in Phase 4.
+        Transactional outbox and Kafka plumbing: services append events in the same database transaction
+        as their business change; a relay publishes them to Kafka; consumers deduplicate by event id and
+        dead-letter what they cannot process. Auto-configured; no business logic.
     </description>
 
     <dependencies>
@@ -26,8 +27,20 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.hpg</groupId>
+            <artifactId>hpg-persistence</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
         </dependency>
     </dependencies>
 </project>

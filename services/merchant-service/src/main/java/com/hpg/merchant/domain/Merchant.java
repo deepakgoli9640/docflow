@@ -41,6 +41,10 @@ public class Merchant extends AuditableEntity {
     @Column(name = "status_reason", length = 500)
     private String statusReason;
 
+    /** Monotonic version of this merchant's published snapshot; see V2 migration. */
+    @Column(name = "snapshot_version", nullable = false)
+    private long snapshotVersion;
+
     protected Merchant() {
         // for JPA
     }
@@ -91,6 +95,15 @@ public class Merchant extends AuditableEntity {
         if (status == MerchantStatus.DEACTIVATED) {
             throw new BusinessException(MerchantErrorCode.MERCHANT_DEACTIVATED, "Merchant " + id + " is deactivated.");
         }
+    }
+
+    /** Takes the next snapshot version. Called once per published snapshot, inside its transaction. */
+    public long nextSnapshotVersion() {
+        return ++snapshotVersion;
+    }
+
+    public long getSnapshotVersion() {
+        return snapshotVersion;
     }
 
     public UUID getId() {

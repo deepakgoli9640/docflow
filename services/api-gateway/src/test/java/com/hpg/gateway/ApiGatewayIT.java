@@ -87,6 +87,9 @@ class ApiGatewayIT {
         registry.add("HPG_RATE_TOKEN_PER_SEC", () -> "1");
         registry.add("HPG_RATE_TOKEN_BURST", () -> "3");
         registry.add("HPG_GATEWAY_MANAGEMENT_PORT", () -> "0");
+        // No broker in this test; the merchant-access tests start one of their own.
+        registry.add("spring.kafka.bootstrap-servers", () -> "localhost:1");
+        registry.add("spring.kafka.listener.auto-startup", () -> "false");
     }
 
     @Autowired

@@ -1,17 +1,17 @@
 package com.hpg.payment.application;
 
+import com.hpg.events.merchant.MerchantSnapshotPayload;
+import com.hpg.payment.domain.CaptureMode;
 import com.hpg.payment.domain.MerchantConfigReplica;
 import com.hpg.payment.infrastructure.persistence.MerchantConfigReplicaRepository;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.util.UUID;
 
 /**
- * Maintains the local merchant configuration replica. From Phase 4 it is fed by merchant.snapshots.v1;
- * until then OPS seeds it through a TEMPORARY admin endpoint.
+ * Applies merchant snapshots to the local replica. The replica is read-only as far as this service is
+ * concerned: merchant-service owns the data, and nothing here may change it except an incoming snapshot.
  */
 @Service
 public class MerchantReplicaService {
@@ -24,12 +24,18 @@ public class MerchantReplicaService {
         this.clock = clock;
     }
 
-    @PreAuthorize("hasRole('OPS')")
+    /** @return true if the snapshot was newer than the stored one and was applied */
     @Transactional
-    public MerchantConfigReplica upsert(UUID merchantId, MerchantConfigReplica.Snapshot snapshot) {
-        MerchantConfigReplica replica = replicas.findById(merchantId).orElseGet(() -> new MerchantConfigReplica(merchantId));
-        // Manual seeding has no upstream version: each write supersedes the previous one.
-        replica.apply(snapshot.withVersion(replica.getSnapshotVersion() + 1), clock.instant());
-        return replicas.save(replica);
+    public boolean apply(MerchantSnapshotPayload payload) {
+        MerchantConfigReplica replica = replicas.findById(payload.merchantId())
+                .orElseGet(() -> new MerchantConfigReplica(payload.merchantId()));
+        boolean applied = replica.apply(new MerchantConfigReplica.Snapshot(
+                payload.version(), payload.displayName(), payload.status(), payload.enabledMethods(),
+                CaptureMode.valueOf(payload.captureMode()), payload.minAmount(), payload.maxAmountPerTransaction(),
+                payload.dailyLimit(), payload.paymentTtlMinutes(), payload.maxAttempts()), clock.instant());
+        if (applied) {
+            replicas.save(replica);
+        }
+        return applied;
     }
 }

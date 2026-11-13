@@ -18,6 +18,16 @@
             <groupId>com.hpg</groupId>
             <artifactId>hpg-common</artifactId>
         </dependency>
+        <!-- Event contracts only (plain records, no Spring, no JPA): the gateway listens to merchant
+             snapshots but must stay a thin reactive edge, so it does not take the messaging module. -->
+        <dependency>
+            <groupId>com.hpg</groupId>
+            <artifactId>hpg-event-contracts</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
@@ -62,6 +72,16 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

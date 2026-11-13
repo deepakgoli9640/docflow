@@ -1,0 +1,137 @@
+# notification-service. Secrets come only from environment variables.
+server:
+  port: 8085
+  shutdown: graceful
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/notification_db
+    username: ${NOTIFICATION_DB_USER:notification_app}
+    password: ${NOTIFICATION_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    admin:
+      auto-create: ${HPG_KAFKA_AUTO_CREATE_TOPICS:true}
+      fail-fast: false
+  mail:
+    # Mailpit locally: a real SMTP server with a web inbox at http://localhost:8025
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+      mail.smtp.auth: ${SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+
+hpg:
+  outbox:
+    enabled: true
+    interval: PT1S
+  security:
+    jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
+    issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    encryption-key: ${HPG_ENCRYPTION_KEY:}
+  notification:
+    merchant-service-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}
+    client-id: notification-service
+    client-secret: ${HPG_NOTIFICATION_CLIENT_SECRET:}
+    from-address: ${HPG_NOTIFICATION_FROM:payments@hpg.example}
+    dispatch-batch-size: 25
+    max-attempts: 12
+    retry-initial: 30s
+    retry-multiplier: 3.0
+    retry-max: 2h
+    stuck-sending-after: 5m
+    webhook-connect-timeout: 3s
+    webhook-read-timeout: 10s
+    # Local development only: lets webhooks reach http://localhost endpoints.
+    allow-private-webhook-targets: ${HPG_ALLOW_INSECURE_WEBHOOKS:false}
+    merchant-config-cache-ttl: 5m
+    jobs:
+      enabled: true
+      interval: PT2S
+      stuck-interval: PT1M
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        notifications.delivery: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - optional:file:../../deploy/env/.env[.properties]
+      - optional:file:./deploy/env/.env[.properties]
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/notification_db
+logging:
+  structured:
+    format:
+      console: ecs
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+logging:
+  structured:
+    format:
+      console: ecs
