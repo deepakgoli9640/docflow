@@ -3,6 +3,7 @@ package com.hpg.transaction.infrastructure.messaging;
 import com.hpg.events.Topics;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
+import com.hpg.events.reconciliation.SettlementConfirmedPayload;
 import com.hpg.messaging.consumer.EventMessage;
 import com.hpg.messaging.consumer.EventParser;
 import com.hpg.messaging.consumer.ProcessedEvents;
@@ -25,6 +26,7 @@ public class TransactionEventsConsumer {
 
     public static final String PAYMENTS_GROUP = "transaction-payments";
     public static final String REFUNDS_GROUP = "transaction-refunds";
+    public static final String SETTLEMENTS_GROUP = "transaction-settlements";
 
     private final EventParser parser;
     private final ProcessedEvents processed;
@@ -58,6 +60,21 @@ public class TransactionEventsConsumer {
         tx.executeWithoutResult(s -> {
             if (processed.markProcessed(REFUNDS_GROUP, event.eventId())) {
                 recorder.onRefundEvent(event, payload);
+            }
+        });
+    }
+
+    /** Settlements confirmed by reconciliation (other event types on the topic are ignored). */
+    @KafkaListener(id = SETTLEMENTS_GROUP, topics = Topics.RECONCILIATION_EVENTS, groupId = SETTLEMENTS_GROUP)
+    public void onReconciliationEvent(String value) {
+        EventMessage event = parser.parse(value);
+        if (!SettlementConfirmedPayload.EVENT_TYPE.equals(event.eventType())) {
+            return;
+        }
+        SettlementConfirmedPayload payload = event.payloadAs(SettlementConfirmedPayload.class);
+        tx.executeWithoutResult(s -> {
+            if (processed.markProcessed(SETTLEMENTS_GROUP, event.eventId())) {
+                recorder.onSettlementConfirmed(event, payload);
             }
         });
     }

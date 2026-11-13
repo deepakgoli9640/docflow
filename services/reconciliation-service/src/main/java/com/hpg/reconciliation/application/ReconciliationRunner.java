@@ -3,6 +3,8 @@ package com.hpg.reconciliation.application;
 import com.hpg.common.error.BusinessException;
 import com.hpg.events.Topics;
 import com.hpg.events.reconciliation.ReconciliationCompletedPayload;
+import com.hpg.events.reconciliation.SettlementConfirmedPayload;
+import com.hpg.common.money.Money;
 import com.hpg.messaging.outbox.OutboxWriter;
 import com.hpg.reconciliation.domain.BatchSource;
 import com.hpg.reconciliation.domain.BatchStatus;
@@ -182,6 +184,7 @@ public class ReconciliationRunner {
                     results.add(new ReconciliationRecord(batchId, o, o.provider() == null ? null : rowIds.get(o.provider())));
                 }
                 records.saveAll(results);
+                outcomes.forEach(o -> publishSettled(batchId, o));
                 int malformed = (int) rows.stream().filter(r -> !r.isValid()).count();
                 batch.complete(rows.size(), malformed, counts, clock.instant());
                 publishCompleted(batch);
@@ -213,6 +216,31 @@ public class ReconciliationRunner {
         outbox.append(Topics.RECONCILIATION_EVENTS, b.getBusinessDate().toString(), "ReconciliationBatch",
                 b.getId().toString(), 1, null, ReconciliationCompletedPayload.EVENT_TYPE,
                 ReconciliationCompletedPayload.CURRENT_VERSION, null, payload);
+    }
+
+    /**
+     * A captured payment the provider settled for exactly our amount: tell the ledger, which books the money
+     * into the bank and the fees as an expense. Only MATCHED payments; refunds were already booked when they
+     * completed, and discrepancies wait for a person.
+     */
+    private void publishSettled(UUID batchId, MatchOutcome o) {
+        if (o.status() != MatchStatus.MATCHED || o.internal() == null || o.provider() == null
+                || !"PAYMENT".equals(o.internal().transactionType())) {
+            return;
+        }
+        SettlementRow row = o.provider();
+        String currency = o.internal().currency();
+        SettlementConfirmedPayload payload = new SettlementConfirmedPayload(batchId, o.internal().merchantId(),
+                o.internal().transactionRef(), o.internal().providerReference(),
+                new Money(o.internal().amount(), currency), money(row.fee(), currency), money(row.tax(), currency),
+                row.settlementId(), row.settledAt());
+        outbox.append(Topics.RECONCILIATION_EVENTS, o.internal().transactionRef(), "Settlement",
+                o.internal().transactionRef(), 1, o.internal().merchantId(), SettlementConfirmedPayload.EVENT_TYPE,
+                SettlementConfirmedPayload.CURRENT_VERSION, null, payload);
+    }
+
+    private static Money money(java.math.BigDecimal amount, String currency) {
+        return amount == null ? Money.zero(currency) : new Money(amount.abs(), currency);
     }
 
     private void requireValidDate(LocalDate date) {

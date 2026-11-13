@@ -10,6 +10,10 @@ public final class LedgerAccounts {
     public static final String PROVIDER_CLEARING = "PROVIDER_CLEARING";
     /** Liability prefix: what we owe each hospital. */
     public static final String MERCHANT_PAYABLE_PREFIX = "MERCHANT_PAYABLE:";
+    /** Asset: money the provider has paid out to our bank account. */
+    public static final String SETTLEMENT_BANK = "SETTLEMENT_BANK";
+    /** Expense: provider fees and the tax on them, deducted at settlement. */
+    public static final String PROVIDER_FEES = "PROVIDER_FEES";
 
     private static final Pattern VALID = Pattern.compile("PROVIDER_CLEARING|SETTLEMENT_BANK|PROVIDER_FEES"
             + "|MERCHANT_PAYABLE:[0-9a-f-]{36}");

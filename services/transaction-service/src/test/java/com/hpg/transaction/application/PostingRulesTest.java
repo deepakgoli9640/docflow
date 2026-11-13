@@ -54,4 +54,27 @@ class PostingRulesTest {
         assertThat(LedgerAccounts.isCreditNormal("MERCHANT_PAYABLE:" + merchant)).isTrue();
         assertThat(LedgerAccounts.isCreditNormal("PROVIDER_CLEARING")).isFalse();
     }
+
+    @Test
+    void settlementMovesTheNetToTheBankAndFeesToExpense() {
+        List<LedgerEntry> entries = PostingRules.settlement(Money.inr("15000.00"), Money.inr("300.00"), Money.inr("54.00"));
+        PostingRules.requireBalanced(entries);
+        assertThat(entries).extracting(e -> e.accountCode() + " " + e.direction() + " " + e.amount().amount())
+                .containsExactly("SETTLEMENT_BANK DEBIT 14646.00", "PROVIDER_FEES DEBIT 354.00",
+                        "PROVIDER_CLEARING CREDIT 15000.00");
+        assertThat(PostingRules.settlement(Money.inr("100.00"), Money.inr("0.00"), Money.inr("0.00"))).hasSize(2);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                PostingRules.settlement(Money.inr("10.00"), Money.inr("10.00"), Money.inr("0.00")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void chargebackAndItsReversalBalanceAndCancelOut() {
+        List<LedgerEntry> cb = PostingRules.chargeback(merchant, Money.inr("700.00"));
+        List<LedgerEntry> back = PostingRules.chargebackReversal(merchant, Money.inr("700.00"));
+        PostingRules.requireBalanced(cb);
+        PostingRules.requireBalanced(back);
+        assertThat(cb.get(0).accountCode()).isEqualTo(back.get(1).accountCode());
+        assertThat(cb.get(0).direction()).isNotEqualTo(back.get(1).direction());
+    }
 }

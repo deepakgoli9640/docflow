@@ -186,4 +186,34 @@ class TransactionFlowIT {
                 .isEqualTo("CAPTURED");
     }
 
+    @Test
+    void settlementConfirmedByReconciliationIsBookedOnce() throws Exception {
+        UUID paymentId = Ids.newId();
+        var payload = new PaymentEventPayload(paymentId, merchantId, "BILL-SETTLE", Money.inr("1000.00"), "CAPTURED",
+                null, "AUTO", "RAZORPAY", "order_s", "pay_settle", false, null, null, t0, null);
+        send(Topics.PAYMENT_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), "PaymentCaptured", 1, t0,
+                "payment-service", "Payment", paymentId.toString(), 2, merchantId, "corr", null, payload));
+        String ref = await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.query(
+                "SELECT transaction_ref FROM transactions WHERE payment_id = ?", (rs, i) -> rs.getString(1), paymentId)
+                .stream().findFirst().orElse(null), java.util.Objects::nonNull);
+
+        // Reconciliation matched it twice (two reports listing the same payment): booked once.
+        for (int i = 0; i < 2; i++) {
+            var settled = new com.hpg.events.reconciliation.SettlementConfirmedPayload(Ids.newId(), merchantId, ref,
+                    "pay_settle", Money.inr("1000.00"), Money.inr("20.00"), Money.inr("3.60"), "setl_1", t0);
+            send(Topics.RECONCILIATION_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), "SettlementConfirmed", 1, t0,
+                    "reconciliation-service", "Settlement", ref, 1, merchantId, "corr", null, settled));
+        }
+        await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.queryForObject(
+                "SELECT count(*) FROM processed_events WHERE consumer_group = 'transaction-settlements'", Integer.class) >= 2);
+        var entries = jdbc.queryForList("""
+                SELECT e.account_code, e.direction, e.amount FROM ledger_entries e JOIN transactions t ON t.id = e.transaction_id
+                WHERE t.payment_id = ? AND e.posting_type = 'SETTLEMENT' ORDER BY e.id""", paymentId);
+        assertThat(entries).extracting(m -> m.get("account_code") + " " + m.get("direction") + " " + m.get("amount"))
+                .containsExactly("SETTLEMENT_BANK DEBIT 976.40", "PROVIDER_FEES DEBIT 23.60", "PROVIDER_CLEARING CREDIT 1000.00");
+        mvc.perform(get("/api/v1/admin/ledger/integrity").with(ops()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.healthy").value(true));
+    }
+
 }
