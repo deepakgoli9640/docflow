@@ -136,5 +136,40 @@ export async function api(path, opts = {}) {
 
 export const get = (path, query) => api(path, { query }).then((r) => r.data);
 
+/** Multipart upload (the browser sets the multipart Content-Type with its boundary). */
+export async function upload(path, formData, query) {
+  const token = await ensureToken();
+  const url = new URL(path, location.origin);
+  for (const [k, v] of Object.entries(query || {})) url.searchParams.set(k, v);
+  const res = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }, body: formData });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { detail: text.slice(0, 200) }; }
+  if (res.status === 413) throw new ApiError(413, { title: 'File too large', detail: 'Settlement files can be at most 20 MB.' });
+  if (!res.ok) throw new ApiError(res.status, data);
+  return data;
+}
+
+/** Downloads a non-JSON resource (e.g. a CSV report) and saves it under {@code filename}. */
+export async function download(path, query, accept, filename) {
+  const token = await ensureToken();
+  const url = new URL(path, location.origin);
+  for (const [k, v] of Object.entries(query || {})) url.searchParams.set(k, v);
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': accept } });
+  if (!res.ok) {
+    let problem = {};
+    try { problem = await res.json(); } catch { /* not JSON */ }
+    throw new ApiError(res.status, problem);
+  }
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 /** A fresh key per user action; reused if the same form is submitted twice. */
 export const newIdempotencyKey = () => crypto.randomUUID();

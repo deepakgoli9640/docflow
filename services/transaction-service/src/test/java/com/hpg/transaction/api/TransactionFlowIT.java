@@ -49,6 +49,8 @@ class TransactionFlowIT {
     KafkaTemplate<String, String> kafka;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    com.hpg.messaging.outbox.OutboxEventRepository outbox;
 
     final UUID merchantId = UUID.randomUUID();
     final Instant t0 = Instant.now().minusSeconds(600);
@@ -140,6 +142,16 @@ class TransactionFlowIT {
         mvc.perform(get("/api/v1/admin/ledger/integrity").with(ops()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.healthy").value(true));
+
+        // Each booking is published for reconciliation, keyed by payment, with the provider's reference.
+        var created = outbox.findAll().stream().filter(e -> paymentId.toString().equals(e.getMessageKey())).toList();
+        assertThat(created).extracting(com.hpg.messaging.outbox.OutboxEvent::getEventType)
+                .containsExactly("TransactionCreated", "TransactionCreated");
+        assertThat(created).extracting(e -> e.getTopic()).containsOnly("ledger.events.v1");
+        assertThat(created).extracting(e -> e.getPayload().at("/payload/transactionType").asText() + ":"
+                        + e.getPayload().at("/payload/providerReference").asText() + ":"
+                        + e.getPayload().at("/payload/amount/amount").asText())
+                .containsExactly("PAYMENT:pay_77:2000.00", "REFUND:rfnd_77:500.00");
 
         // The ledger is append-only, enforced by the database.
         assertThatThrownBy(() -> jdbc.update("UPDATE ledger_entries SET amount = amount + 1"))

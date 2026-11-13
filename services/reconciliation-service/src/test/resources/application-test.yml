@@ -1,0 +1,21 @@
+# Test-only values.
+hpg:
+  security:
+    jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
+    issuer: http://localhost
+  messaging:
+    outbox:
+      relay:
+        enabled: false
+    consumer:
+      max-retries: 2
+      initial-interval: 100ms
+      max-interval: 200ms
+  reconciliation:
+    provider: simulated          # CSV uploads only; the Razorpay source has its own WireMock test
+    settlement-window-days: 1
+    scheduled-run:
+      enabled: false
+logging:
+  level:
+    com.hpg: DEBUG

@@ -7,6 +7,11 @@ import {
 } from '../ui.js';
 import { navigate, pageHeader } from '../router.js';
 
+/** Payment links served through this dashboard's origin, so they work wherever the dashboard is open. */
+const sameOrigin = (url) => {
+  try { const u = new URL(url); return u.pathname.startsWith('/checkout/') ? location.origin + u.pathname : url; } catch { return url; }
+};
+
 const PAYMENT_STATUSES = ['CREATED', 'PENDING', 'PROCESSING', 'AUTHORIZED', 'CAPTURED', 'FAILED', 'CANCELLED', 'EXPIRED', 'UNKNOWN'];
 const REFUND_STATUSES = ['CREATED', 'PROCESSING', 'UNKNOWN', 'COMPLETED', 'FAILED'];
 const TXN_STATUSES = ['INITIATED', 'AUTHORIZED', 'CAPTURED', 'COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED'];
@@ -125,8 +130,9 @@ function paymentDrawer(id) {
 
     const actions = [];
     if (p.checkoutUrl && ['CREATED', 'PENDING'].includes(p.status)) {
-      actions.push(h('a', { class: 'btn btn-secondary', href: p.checkoutUrl, target: '_blank', rel: 'noopener' }, 'Open checkout page'),
-        copyButton(p.checkoutUrl, 'Copy payment link'));
+      const link = sameOrigin(p.checkoutUrl);
+      actions.push(h('a', { class: 'btn btn-secondary', href: link, target: '_blank', rel: 'noopener' }, 'Open checkout page'),
+        copyButton(link, 'Copy payment link'));
     }
     if (p.status === 'AUTHORIZED') {
       actions.push(button('Capture', () => confirmDialog('Capture payment', `Capture ${money(p.amount)} from the patient's authorization?`,
@@ -147,7 +153,7 @@ function paymentDrawer(id) {
     return h('div', { class: 'stack' },
       h('div', { class: 'detail-hero' }, h('p', { class: 'hero-amount' }, money(p.amount)), badge(p.status),
         p.lateCapture && h('span', { class: 'badge badge-warn' }, 'Late capture')),
-      actions.length && h('div', { class: 'actions' }, actions),
+      actions.length > 0 && h('div', { class: 'actions' }, actions),
       p.lateCapture && h('div', { class: 'alert alert-warn' }, 'The provider captured this payment after it had expired, '
         + 'been cancelled or failed. The money was received; check whether the bill was settled another way.'),
       fields([
@@ -160,7 +166,7 @@ function paymentDrawer(id) {
         ['Expires', ['CREATED', 'PENDING'].includes(p.status) ? dateTime(p.expiresAt) : null],
         ['Captured', p.capturedAt ? dateTime(p.capturedAt) : null],
         p.failureReason && ['Failure', `${p.failureReason}${p.failureCode ? ` (${p.failureCode})` : ''}`],
-        refunds.length && ['Refunded', `${money({ amount: refunded.toFixed(2), currency: p.amount.currency })}`
+        refunds.length > 0 && ['Refunded', `${money({ amount: refunded.toFixed(2), currency: p.amount.currency })}`
           + (inFlight ? ` (+ ${money({ amount: inFlight.toFixed(2), currency: p.amount.currency })} in progress)` : '')],
       ]),
       h('h3', {}, 'Status history'),
@@ -199,8 +205,9 @@ function newPaymentDialog(onDone) {
     return h('div', { class: 'stack' },
       h('div', { class: 'alert alert-good' }, `Payment of ${money(data.amount)} created for ${data.merchantReference}.`),
       data.checkoutUrl
-        ? [h('p', {}, 'Send this link to the patient:'), h('div', { class: 'link-box' }, h('code', {}, data.checkoutUrl), copyButton(data.checkoutUrl)),
-          h('a', { class: 'btn btn-secondary', href: data.checkoutUrl, target: '_blank', rel: 'noopener' }, 'Open checkout page')]
+        ? [h('p', {}, 'Send this link to the patient:'),
+          h('div', { class: 'link-box' }, h('code', {}, sameOrigin(data.checkoutUrl)), copyButton(sameOrigin(data.checkoutUrl))),
+          h('a', { class: 'btn btn-secondary', href: sameOrigin(data.checkoutUrl), target: '_blank', rel: 'noopener' }, 'Open checkout page')]
         : h('p', { class: 'muted' }, `Status: ${humanize(data.status)}. The payment link will appear on the payment once the provider order exists.`));
   }, { submitLabel: 'Create payment' });
 }

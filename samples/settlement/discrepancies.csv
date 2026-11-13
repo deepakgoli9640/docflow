@@ -1,0 +1,7 @@
+entity_id,type,order_id,amount,fee,tax,currency,settlement_id,settled_at,created_at
+pay_N1a2b3c4d5e6f7,payment,order_N1a2b3c4d5,19990.00,400.00,72.00,INR,setl_N9z8y7x6,2026-11-13T10:30:00Z,2026-11-12T09:15:02Z
+pay_N2b3c4d5e6f7g8,payment,order_N2b3c4d5e6,4500.00,90.00,16.20,INR,setl_N9z8y7x6,2026-11-13T10:30:00Z,2026-11-12T11:02:40Z
+pay_N2b3c4d5e6f7g8,payment,order_N2b3c4d5e6,4500.00,90.00,16.20,INR,setl_N9z8y7x6,2026-11-13T10:30:00Z,2026-11-12T11:02:40Z
+pay_N9unknown00001,payment,order_N9unknown0,1200.00,24.00,4.32,INR,setl_N9z8y7x6,2026-11-13T10:30:00Z,2026-11-12T16:45:10Z
+adj_N5adjustment01,adjustment,,35.00,0.00,0.00,INR,setl_N9z8y7x6,2026-11-13T10:30:00Z,2026-11-12T18:00:00Z
+pay_N3broken,payment,,twelve hundred,,,INR,setl_N9z8y7x6,,

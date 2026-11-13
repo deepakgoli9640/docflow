@@ -21,11 +21,23 @@ server {
         add_header X-Frame-Options DENY always;
     }
 
+    # The patient checkout page, so payment links also open from a phone or another machine. It sends its own
+    # nonce-based Content-Security-Policy; the add_header here stops the dashboard's CSP above from being
+    # inherited (nginx only inherits add_header into locations that define none).
+    location /checkout/ {
+        proxy_pass ${GATEWAY_URL};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header X-Content-Type-Options nosniff always;
+    }
+
     location ~ ^/(api|oauth2)/ {
         proxy_pass ${GATEWAY_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 30s;
+        client_max_body_size 21m;   # settlement-file uploads (the gateway allows 21 MB on that route only)
     }
 }

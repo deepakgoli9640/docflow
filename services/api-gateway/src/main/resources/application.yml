@@ -25,10 +25,9 @@ spring:
           httpclient:
             connect-timeout: 2000
             response-timeout: 10s
+          # The 1 MB request-size limit is set per route (not here): a default filter cannot be loosened by a
+          # route, and settlement-file uploads need 20 MB.
           default-filters:
-            - name: RequestSize
-              args:
-                maxSize: 1MB
             - DedupeResponseHeader=X-Correlation-Id, RETAIN_FIRST
             - SecureHeaders
           filter:
@@ -44,6 +43,9 @@ spring:
               predicates:
                 - Path=/oauth2/token,/oauth2/jwks
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@ipKeyResolver}"
@@ -55,6 +57,9 @@ spring:
                 - Path=/api/v1/merchants
                 - Method=POST
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@ipKeyResolver}"
@@ -65,6 +70,9 @@ spring:
               predicates:
                 - Path=/api/v1/merchants/me,/api/v1/merchants/me/**,/api/v1/admin/merchants,/api/v1/admin/merchants/**
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -77,6 +85,9 @@ spring:
               predicates:
                 - Path=/api/v1/payments,/api/v1/payments/**
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -87,6 +98,9 @@ spring:
               predicates:
                 - Path=/checkout/**
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@ipKeyResolver}"
@@ -108,6 +122,9 @@ spring:
               predicates:
                 - Path=/api/v1/refunds,/api/v1/refunds/**
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -129,6 +146,9 @@ spring:
               predicates:
                 - Path=/api/v1/transactions,/api/v1/transactions/**,/api/v1/reports/**,/api/v1/admin/ledger/**
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -141,6 +161,38 @@ spring:
               predicates:
                 - Path=/api/v1/notifications,/api/v1/notifications/**,/api/v1/admin/notifications/**
               filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_API_PER_SEC:50}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_API_BURST:100}
+
+            # --- reconciliation-service (OPS) ------------------------------------------
+            - id: reconciliation-upload
+              uri: ${HPG_RECON_SERVICE_URI:http://localhost:8086}
+              predicates:
+                - Path=/api/v1/reconciliation/settlement-files
+                - Method=POST
+              filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 21MB
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: 1
+                    redis-rate-limiter.burstCapacity: 5
+            - id: reconciliation-api
+              uri: ${HPG_RECON_SERVICE_URI:http://localhost:8086}
+              predicates:
+                - Path=/api/v1/reconciliation/**
+              filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 1MB
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"

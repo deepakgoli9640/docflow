@@ -31,6 +31,7 @@
         <module>services/refund-service</module>
         <module>services/transaction-service</module>
         <module>services/notification-service</module>
+        <module>services/reconciliation-service</module>
         <module>services/api-gateway</module>
     </modules>
 

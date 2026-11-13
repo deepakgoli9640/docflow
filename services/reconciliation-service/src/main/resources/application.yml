@@ -1,0 +1,129 @@
+# reconciliation-service. Secrets come only from environment variables.
+server:
+  port: 8086
+  shutdown: graceful
+
+spring:
+  application:
+    name: reconciliation-service
+  datasource:
+    url: jdbc:postgresql://${RECON_DB_HOST:localhost}:${RECON_DB_PORT:5432}/recon_db
+    username: ${RECON_DB_USER:recon_app}
+    password: ${RECON_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+    listener:
+      ack-mode: record
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+
+hpg:
+  security:
+    jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
+    issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+  reconciliation:
+    # razorpay: daily API runs against the Razorpay settlement recon report; simulated: CSV uploads only
+    provider: ${HPG_PAYMENT_PROVIDER:razorpay}
+    business-zone: Asia/Kolkata
+    # Internal transactions are flagged MISSING_IN_PROVIDER only after this many days without settlement.
+    settlement-window-days: ${HPG_RECON_SETTLEMENT_WINDOW_DAYS:3}
+    lookback-days: 60
+    max-file-rows: 200000
+    stale-run-after: 30m
+    scheduled-run:
+      enabled: ${HPG_RECON_SCHEDULED_RUN:true}
+      cron: "0 0 6 * * *"          # 06:00 in business-zone, reconciles the previous day
+    razorpay:
+      base-url: https://api.razorpay.com
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      connect-timeout: 2s
+      read-timeout: 15s
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - optional:file:../../deploy/env/.env[.properties]
+      - optional:file:./deploy/env/.env[.properties]
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/recon_db
+logging:
+  structured:
+    format:
+      console: ecs
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+logging:
+  structured:
+    format:
+      console: ecs

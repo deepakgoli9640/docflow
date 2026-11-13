@@ -113,7 +113,25 @@ Planned:
 - Tests: concurrent partial refunds, over-refund, refund timeout; ledger balance/immutability
   tests against real Postgres; idempotent posting; out-of-order capture/refund.
 
-## Phase 6 — reconciliation-service
+## Phase 6 — reconciliation-service ✅ done
+
+Delivered, with these differences:
+- transaction-service now publishes `TransactionCreated` (with the provider reference) for every ledger
+  posting; that was the missing input.
+- Internal-only items are flagged `MISSING_IN_PROVIDER` once older than the settlement window (T+N, default 3,
+  `0` in local Compose) and keep being flagged in later batches until matched or resolved. A reference matched
+  in another day's report is a cross-day `DUPLICATE` (settled twice). "Near the day boundary → PENDING_REVIEW"
+  is not implemented; the window covers it.
+- Batches run in the background (202 + poll); a RUNNING batch older than 30 min is marked FAILED.
+- API runs need Razorpay credentials; with the simulated provider only CSV uploads are available.
+- Not built: settlement postings to the ledger (stretch), finance email on `ReconciliationCompleted`.
+- Gateway: request-size limits moved from a default filter to each route (1 MB), so the upload route can
+  allow 21 MB.
+- Tests: table-driven matching and CSV parser unit tests, Razorpay settlement source (WireMock),
+  ReconciliationFlowIT (every status, duplicate file, workflow, daily report, roles), TransactionCreated
+  publishing, gateway size limits; `scripts/smoke-test-phase6.sh`.
+
+Planned:
 
 - Internal transaction replica from `ledger.events.v1`.
 - CSV ingestion (streaming, checksum dedupe, malformed-row capture), Razorpay settlement API

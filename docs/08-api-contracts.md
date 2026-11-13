@@ -169,7 +169,9 @@ Content-Type: application/problem+json
 | GET | `/api/v1/reconciliation/batches?businessDate=&page=` | OPS | 200 | List batches |
 | GET | `/api/v1/reconciliation/batches/{id}` | OPS | 200 | Batch summary and counts |
 | GET | `/api/v1/reconciliation/batches/{id}/records?status=&resolutionStatus=&page=` | OPS | 200 | Records |
-| POST | `/api/v1/reconciliation/records/{id}/resolve` | OPS | 200 | Resolve a discrepancy (note mandatory) |
+| GET | `/api/v1/reconciliation/records/{id}` | OPS | 200 | One record |
+| POST | `/api/v1/reconciliation/records/{id}/review` | OPS | 200 | Take a discrepancy into review (OPEN → IN_REVIEW) |
+| POST | `/api/v1/reconciliation/records/{id}/resolve` | OPS | 200 | Resolve a discrepancy (type + note mandatory; correction reference for `INTERNAL_CORRECTION_POSTED`) |
 | GET | `/api/v1/reconciliation/reports/daily?date=` | OPS | 200 | Daily report (JSON; `Accept: text/csv` for CSV) |
 
 `202 Accepted` because a batch can take a while; poll the batch resource (`Location` header).

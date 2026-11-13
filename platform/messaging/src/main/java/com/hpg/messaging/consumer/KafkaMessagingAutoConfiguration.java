@@ -43,7 +43,7 @@ public class KafkaMessagingAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaMessagingAutoConfiguration.class);
     private static final List<String> TOPICS = List.of(Topics.PAYMENT_EVENTS, Topics.REFUND_EVENTS,
-            Topics.NOTIFICATION_EVENTS);
+            Topics.NOTIFICATION_EVENTS, Topics.LEDGER_EVENTS, Topics.RECONCILIATION_EVENTS);
 
     @Bean
     @ConditionalOnMissingBean

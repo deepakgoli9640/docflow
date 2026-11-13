@@ -7,7 +7,7 @@ part of a bill. It handles payments, refunds, the ledger, notifications and reco
 Java 21 · Spring Boot 3.5 · Spring Cloud Gateway · Spring Security / Authorization Server ·
 PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 
-> **Status: Phases 4 and 5 complete**: the full service architecture runs end to end.
+> **Status: Phases 2–6 complete**: the full service architecture runs end to end.
 >
 > ```
 > Hospital application ──> API Gateway (auth, routing, rate limiting)
@@ -15,7 +15,8 @@ PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 >                            ├─> refund-service        full and partial refunds
 >                            ├─> transaction-service   transaction history, status, ledger
 >                            └─> notification-service  hospital webhooks, patient emails
->        Kafka (payment.events.v1, refund.events.v1) connects them asynchronously;
+>                            └─> reconciliation-service ledger vs provider settlement (operations)
+>        Kafka (payment, refund, ledger, merchant events) connects them asynchronously;
 >        payment- and refund-service talk to the external payment provider (Razorpay).
 > ```
 >
@@ -47,6 +48,7 @@ services/payment-service/    Payments, state machine, idempotency, Razorpay adap
 services/refund-service/     Full/partial refunds, atomic refundable-amount reservation, refund webhooks, recovery
 services/transaction-service/ Transaction history and status, double-entry ledger, summary reports
 services/notification-service/ Signed hospital webhooks and patient emails, retried with backoff
+services/reconciliation-service/ Ledger vs provider settlement: CSV/API reports, matching, discrepancy workflow
 ui/dashboard/                Web dashboard for hospitals and operations (static files + nginx, no build step)
 deploy/docker-compose.yml    Local environment, split into profiles
 deploy/postgres/init/        One database + one locked-down user per service
@@ -74,7 +76,7 @@ docs/                        Architecture documentation
 # 3a. Run everything in Docker (~2.1 GB RAM in total, measured)
 ./mvnw -DskipTests package
 docker compose -f deploy/docker-compose.yml --profile infra --profile core \
-  --profile refund --profile transactions --profile notify --profile dashboard up -d --build
+  --profile refund --profile transactions --profile notify --profile recon --profile dashboard up -d --build
 ./scripts/seed-demo-data.sh       # optional: demo data + sign-in details for the dashboard
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
@@ -87,6 +89,7 @@ docker compose -f deploy/docker-compose.yml --profile infra up -d
 ./scripts/smoke-test-phase2.sh
 ./scripts/smoke-test-phase3.sh
 ./scripts/smoke-test-phase4.sh    # payment -> Kafka -> refund, transactions, notifications
+./scripts/smoke-test-phase6.sh    # ledger -> reconciliation against a settlement CSV
 
 # Stop (add -v to also delete the database volume)
 docker compose -f deploy/docker-compose.yml --profile '*' down
@@ -101,6 +104,7 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | http://localhost:8083/swagger-ui.html | refund-service OpenAPI / Swagger UI |
 | http://localhost:8084/swagger-ui.html | transaction-service OpenAPI / Swagger UI |
 | http://localhost:8085/swagger-ui.html | notification-service OpenAPI / Swagger UI |
+| http://localhost:8086/swagger-ui.html | reconciliation-service OpenAPI / Swagger UI |
 | http://localhost:8025 | Mailpit: every email the system sends locally |
 | http://localhost:8080/checkout/{token} | Hosted checkout page (the `checkoutUrl` of a payment) |
 

@@ -3,6 +3,7 @@ import { auth } from './api.js';
 import { h, clear, errorBox, button } from './ui.js';
 import * as hospital from './views/hospital.js';
 import * as admin from './views/admin.js';
+import { reconciliation } from './views/reconciliation.js';
 
 const root = document.getElementById('app');
 
@@ -19,6 +20,7 @@ const NAV = {
     ['overview', 'Overview', admin.overview],
     ['merchants', 'Hospitals', admin.merchants],
     ['notifications', 'Notifications', admin.notifications],
+    ['reconciliation', 'Reconciliation', reconciliation],
     ['ledger', 'Ledger', admin.ledger],
   ],
 };

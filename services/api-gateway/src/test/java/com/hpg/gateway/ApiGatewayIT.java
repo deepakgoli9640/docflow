@@ -83,6 +83,7 @@ class ApiGatewayIT {
         }
         registry.add("HPG_MERCHANT_SERVICE_URI", MERCHANT_SERVICE::baseUrl);
         registry.add("HPG_PAYMENT_SERVICE_URI", MERCHANT_SERVICE::baseUrl); // same stub plays both services
+        registry.add("HPG_RECON_SERVICE_URI", MERCHANT_SERVICE::baseUrl);
         registry.add("HPG_TOKEN_ISSUER", () -> ISSUER);
         registry.add("HPG_RATE_TOKEN_PER_SEC", () -> "1");
         registry.add("HPG_RATE_TOKEN_BURST", () -> "3");
@@ -289,6 +290,24 @@ class ApiGatewayIT {
                 .bodyValue("{\"pad\":\"" + "x".repeat(70_000) + "\"}")
                 .exchange()
                 .expectStatus().value(s -> assertThat(s).isIn(400, 413));
+    }
+
+    @Test
+    void requestBodiesAreLimitedTo1MbExceptSettlementUploads() throws Exception {
+        String ops = token(signingKey, ISSUER, List.of("OPS"), Instant.now().plusSeconds(600));
+        String twoMb = "x".repeat(2 * 1024 * 1024);
+        client.post().uri("/api/v1/payments").header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken())
+                .contentType(MediaType.APPLICATION_JSON).bodyValue("{\"pad\":\"" + twoMb + "\"}")
+                .exchange()
+                .expectStatus().value(s -> assertThat(s).isIn(400, 413));
+        client.post().uri("/api/v1/reconciliation/settlement-files").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                .contentType(MediaType.TEXT_PLAIN).bodyValue(twoMb)
+                .exchange()
+                .expectStatus().isOk();
+        client.post().uri("/api/v1/reconciliation/settlement-files").header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken())
+                .contentType(MediaType.TEXT_PLAIN).bodyValue("x")
+                .exchange()
+                .expectStatus().isForbidden();
     }
 
     @Test
