@@ -70,9 +70,37 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
+  kubernetes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+      - name: Install kubeconform
+        run: go install github.com/yannh/kubeconform/cmd/kubeconform@v0.6.7
+      # The chart and the operator resources must be valid Kubernetes objects (schemas for 1.30 + CRDs).
+      - name: Lint and validate manifests
+        run: |
+          set -euo pipefail
+          CRDS='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          for values in values.yaml values-demo.yaml; do
+            helm lint deploy/helm/hpg --kube-version 1.30.0 -f "deploy/helm/hpg/$values"
+            helm template hpg deploy/helm/hpg --kube-version 1.30.0 -f "deploy/helm/hpg/$values" \
+              | "$(go env GOPATH)/bin/kubeconform" -strict -summary -kubernetes-version 1.30.0 -
+          done
+          "$(go env GOPATH)/bin/kubeconform" -strict -summary -kubernetes-version 1.30.0 deploy/k8s/demo-infra.yaml
+          "$(go env GOPATH)/bin/kubeconform" -summary -kubernetes-version 1.30.0 \
+            -schema-location default -schema-location "$CRDS" deploy/k8s/infra/postgres.yaml deploy/k8s/infra/kafka.yaml
+
   images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [build, secrets]
+    needs: [build, secrets, kubernetes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

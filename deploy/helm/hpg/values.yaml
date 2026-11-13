@@ -1,0 +1,135 @@
+# Healthcare Payment Gateway on Kubernetes. See deploy/k8s/README.md for the whole picture:
+# infrastructure (Postgres, Kafka, Redis) comes from operators or managed services, not from this chart.
+
+image:
+  registry: ghcr.io/deepakgoli9640      # CI pushes ghcr.io/<owner>/hpg-<service>:<sha>
+  tag: latest                           # pin a commit SHA in real deployments
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# SPRING_PROFILES_ACTIVE for every service: JSON logs, no Swagger UI.
+springProfile: prod
+
+# Production JVM settings (the Dockerfiles default to small-footprint local settings).
+javaToolOptions: "-XX:+UseG1GC -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError -Duser.timezone=UTC"
+
+postgres:
+  host: hpg-postgres-rw                 # CloudNativePG read-write service (deploy/k8s/infra/postgres.yaml)
+  port: 5432
+  sslMode: require                      # encrypted; verify-full additionally needs the server CA mounted
+
+kafka:
+  bootstrapServers: hpg-kafka-kafka-bootstrap:9092   # Strimzi (deploy/k8s/infra/kafka.yaml)
+  topicPartitions: 6
+  topicReplicas: 3                      # survive one broker failure...
+  minInsyncReplicas: 2                  # ...and acks=all means written to two brokers
+
+redis:
+  host: hpg-redis-master                # gateway only: rate limits + suspended-merchant deny-list (fails open)
+  port: 6379
+
+tracing:
+  export: false
+  endpoint: http://otel-collector.monitoring:4318/v1/traces
+  sampling: "0.1"
+
+paymentProvider: razorpay               # "simulated" only for demos
+checkoutBaseUrl: https://api.hpg.example/checkout
+emailFrom: payments@hpg.example
+smtp:
+  host: smtp.example.com
+  port: 587
+
+# Secrets are NOT stored in values. Create them with External Secrets / Sealed Secrets / your vault:
+#   <existingSecret>       keys: MERCHANT_DB_PASSWORD, PAYMENT_DB_PASSWORD,
+#                          REFUND_DB_PASSWORD, TRANSACTION_DB_PASSWORD, NOTIFICATION_DB_PASSWORD,
+#                          RECON_DB_PASSWORD, HPG_ENCRYPTION_KEY, HPG_OPS_CLIENT_SECRET,
+#                          HPG_NOTIFICATION_CLIENT_SECRET, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
+#                          RAZORPAY_WEBHOOK_SECRET, SMTP_USERNAME, SMTP_PASSWORD, REDIS_PASSWORD
+#   <jwtSecret>            keys: private.pem, public.pem (token signing key; every merchant-service replica
+#                          must sign with the same key)
+secrets:
+  existingSecret: hpg-secrets
+  jwtSecret: hpg-jwt
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-body-size: 21m      # settlement uploads; the gateway enforces per-route limits
+  tls: true
+  apiHost: api.hpg.example
+  dashboardHost: app.hpg.example
+
+networkPolicy:
+  enabled: true
+  # Where the ingress controller and Prometheus run; they may reach the gateway / scrape metrics.
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: ingress-nginx
+  monitoringNamespaceSelector:
+    kubernetes.io/metadata.name: monitoring
+
+serviceMonitor:
+  enabled: false                        # true when the Prometheus Operator CRDs are installed
+
+defaults:
+  replicas: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 768Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    minAvailable: 1
+  terminationGracePeriodSeconds: 45
+
+# Per service: port, managementPort (if separate), db (env prefix of its database), secrets (the only keys of
+# the existing secret this service receives: least privilege), plus overrides of `defaults`.
+services:
+  api-gateway:
+    port: 8080
+    managementPort: 9080
+    secrets: [REDIS_PASSWORD]
+    resources:
+      requests: { cpu: 250m, memory: 384Mi }
+      limits: { memory: 512Mi }
+  merchant-service:
+    port: 8081
+    db: MERCHANT
+    secrets: [HPG_ENCRYPTION_KEY, HPG_OPS_CLIENT_SECRET, HPG_NOTIFICATION_CLIENT_SECRET]
+  payment-service:
+    port: 8082
+    db: PAYMENT
+    secrets: [HPG_ENCRYPTION_KEY, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET]
+    autoscaling: { maxReplicas: 10 }
+  refund-service:
+    port: 8083
+    db: REFUND
+    secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET]
+  transaction-service:
+    port: 8084
+    db: TRANSACTION
+    secrets: []
+  notification-service:
+    port: 8085
+    db: NOTIFICATION
+    secrets: [HPG_ENCRYPTION_KEY, HPG_NOTIFICATION_CLIENT_SECRET, SMTP_USERNAME, SMTP_PASSWORD]
+  reconciliation-service:
+    port: 8086
+    db: RECON
+    secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET]
+    resources:                          # streams settlement files of up to 20 MB
+      requests: { cpu: 250m, memory: 512Mi }
+      limits: { memory: 1Gi }
+  dashboard:
+    port: 8090
+    image: dashboard
+    replicas: 2
+    resources:
+      requests: { cpu: 25m, memory: 32Mi }
+      limits: { memory: 64Mi }
+    autoscaling: { enabled: false }

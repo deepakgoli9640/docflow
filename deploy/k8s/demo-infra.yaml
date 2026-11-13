@@ -1,0 +1,125 @@
+# Single-instance infrastructure for a DEMO on a laptop cluster (not HA, no persistence guarantees).
+# Production uses deploy/k8s/infra/ (CloudNativePG, Strimzi, Redis with replicas) or managed services.
+# Applied by scripts/k8s-demo-up.sh, which first creates the "hpg-secrets" Secret and the
+# "hpg-postgres-init" ConfigMap (deploy/postgres/init/).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hpg-postgres
+spec:
+  serviceName: hpg-postgres
+  replicas: 1
+  selector: { matchLabels: { app: hpg-postgres } }
+  template:
+    metadata: { labels: { app: hpg-postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          args: ["-c", "shared_buffers=128MB", "-c", "max_connections=120", "-c", "timezone=UTC"]
+          envFrom:
+            - secretRef: { name: hpg-secrets }
+          env:
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\""] }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+      volumes:
+        - name: init
+          configMap: { name: hpg-postgres-init, defaultMode: 0555 }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: hpg-postgres }
+spec:
+  selector: { app: hpg-postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: hpg-kafka }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: hpg-kafka } }
+  template:
+    metadata: { labels: { app: hpg-kafka } }
+    spec:
+      enableServiceLinks: false   # a Service named hpg-kafka would otherwise inject KAFKA_* variables
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.1
+          env:
+            - { name: KAFKA_NODE_ID, value: "1" }
+            - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+            - { name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093" }
+            - { name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://hpg-kafka:9092" }
+            - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT" }
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER" }
+            - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093" }
+            - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
+            - { name: KAFKA_HEAP_OPTS, value: "-Xmx384m -Xms384m" }
+          ports: [{ containerPort: 9092 }]
+          readinessProbe:
+            tcpSocket: { port: 9092 }
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata: { name: hpg-kafka }
+spec:
+  selector: { app: hpg-kafka }
+  ports: [{ port: 9092 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: hpg-redis }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: hpg-redis } }
+  template:
+    metadata: { labels: { app: hpg-redis } }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["redis-server", "--maxmemory", "48mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+          ports: [{ containerPort: 6379 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: hpg-redis }
+spec:
+  selector: { app: hpg-redis }
+  ports: [{ port: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: hpg-mailpit }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: hpg-mailpit } }
+  template:
+    metadata: { labels: { app: hpg-mailpit } }
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.21
+          ports: [{ containerPort: 1025 }, { containerPort: 8025 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: hpg-mailpit }
+spec:
+  selector: { app: hpg-mailpit }
+  ports: [{ name: smtp, port: 1025 }, { name: ui, port: 8025 }]

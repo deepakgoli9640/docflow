@@ -7,7 +7,7 @@ spring:
   application:
     name: notification-service
   datasource:
-    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/notification_db
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/notification_db?sslmode=${NOTIFICATION_DB_SSLMODE:prefer}
     username: ${NOTIFICATION_DB_USER:notification_app}
     password: ${NOTIFICATION_DB_PASSWORD:}
     hikari:

@@ -8,7 +8,7 @@ spring:
   application:
     name: merchant-service
   datasource:
-    url: jdbc:postgresql://${MERCHANT_DB_HOST:localhost}:${MERCHANT_DB_PORT:5432}/merchant_db
+    url: jdbc:postgresql://${MERCHANT_DB_HOST:localhost}:${MERCHANT_DB_PORT:5432}/merchant_db?sslmode=${MERCHANT_DB_SSLMODE:prefer}
     username: ${MERCHANT_DB_USER:merchant_app}
     password: ${MERCHANT_DB_PASSWORD:}
     hikari:

@@ -7,7 +7,7 @@ spring:
   application:
     name: refund-service
   datasource:
-    url: jdbc:postgresql://${REFUND_DB_HOST:localhost}:${REFUND_DB_PORT:5432}/refund_db
+    url: jdbc:postgresql://${REFUND_DB_HOST:localhost}:${REFUND_DB_PORT:5432}/refund_db?sslmode=${REFUND_DB_SSLMODE:prefer}
     username: ${REFUND_DB_USER:refund_app}
     password: ${REFUND_DB_PASSWORD:}
     hikari:

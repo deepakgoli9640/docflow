@@ -202,6 +202,25 @@ Planned:
 - Final README, sample requests (HTTP files / curl), and `docs/interview-guide.md` (how to explain
   each design decision, likely questions and trade-offs).
 
+## Phase 9 — Production readiness
+
+Four parts, in order: Kubernetes + HA, production security, business features, a real Razorpay sandbox run.
+
+### 9a — Kubernetes and high availability ✅ done (validated statically)
+- Helm chart for the gateway, six services and the dashboard:
+  - 2+ replicas, autoscaling on CPU, disruption budgets, zone/node spreading;
+  - startup, liveness and readiness probes, `preStop` pause and graceful shutdown;
+  - NetworkPolicies, hardened pods, per-service secrets, ingress with TLS (cert-manager), ServiceMonitors, a
+    `helm test`.
+- CloudNativePG (3 instances, synchronous replica, PITR backups), Strimzi Kafka (3 KRaft nodes, RF 3, min ISR 2),
+  Redis values. Topic replication and `min.insync.replicas` are now configurable in the services.
+- Production profile for the gateway (JSON logs), Redis password support, Postgres `sslmode` per service.
+- Verified:
+  - schemas (also in CI);
+  - every image run non-root with a read-only root filesystem and the production profile;
+  - two replicas of every service passing the smoke tests with no duplicates (`scripts/ha-check.sh`).
+- Not verified: an install on a live cluster (kind cannot run in the build environment).
+
 ## Testing approach used throughout
 
 | Level | Tools | Notes |

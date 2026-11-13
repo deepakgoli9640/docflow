@@ -12,11 +12,17 @@ import java.time.Duration;
  * @param initialInterval   first backoff
  * @param maxInterval       cap per backoff
  * @param topicPartitions   partitions for topics this service creates (local default; production: more)
+ * @param topicReplicas     replication factor for topics this service creates: 1 locally (one broker),
+ *                          3 in production so a broker can fail without losing acknowledged events
+ * @param minInsyncReplicas {@code min.insync.replicas} for those topics (0 = broker default); 2 with 3 replicas,
+ *                          so {@code acks=all} means "written to at least two brokers"
  */
 @ConfigurationProperties("hpg.messaging.consumer")
 public record KafkaConsumerProperties(
         @DefaultValue("12") int maxRetries,
         @DefaultValue("1s") Duration initialInterval,
         @DefaultValue("30s") Duration maxInterval,
-        @DefaultValue("3") int topicPartitions) {
+        @DefaultValue("3") int topicPartitions,
+        @DefaultValue("1") int topicReplicas,
+        @DefaultValue("0") int minInsyncReplicas) {
 }

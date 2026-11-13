@@ -7,7 +7,7 @@ spring:
   application:
     name: reconciliation-service
   datasource:
-    url: jdbc:postgresql://${RECON_DB_HOST:localhost}:${RECON_DB_PORT:5432}/recon_db
+    url: jdbc:postgresql://${RECON_DB_HOST:localhost}:${RECON_DB_PORT:5432}/recon_db?sslmode=${RECON_DB_SSLMODE:prefer}
     username: ${RECON_DB_USER:recon_app}
     password: ${RECON_DB_PASSWORD:}
     hikari:

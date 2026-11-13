@@ -1,0 +1,23 @@
+{{- $root := . -}}
+{{- range $name, $raw := .Values.services }}
+{{- $ctx := dict "root" $root "name" $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hpg.component" $ctx }}
+  labels:
+    {{- include "hpg.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "hpg.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $raw.port }}
+      targetPort: http
+    {{- if $raw.managementPort }}
+    - name: management
+      port: {{ $raw.managementPort }}
+      targetPort: management
+    {{- end }}
+{{- end }}

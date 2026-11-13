@@ -95,4 +95,6 @@ designed but not built.
 | Local TLS | **Not yet** | Plain HTTP locally; TLS terminates at the ingress in production |
 | Failure-scenario tests: Kafka outage (container paused), database outage (container stopped) | **Real** | Every scenario in [11](11-failure-scenarios.md) has an automated test |
 | Load test (k6 script + JDK runner), measured report | **Real** | [load-test-report.md](load-test-report.md); single 4-vCPU machine |
-| Kubernetes manifests, Alertmanager routing, high availability | **Not yet** | Compose only |
+| Kubernetes: Helm chart (replicas, HPA, PDB, probes, rolling updates, NetworkPolicies, ingress + TLS, least-privilege secrets), CloudNativePG / Strimzi / Redis manifests | **Real, validated statically** | Schema-validated in CI; every image run with the chart's security settings; **not yet installed on a live cluster** ([deploy/k8s](../deploy/k8s/README.md)) |
+| High availability: two replicas of every service pass the end-to-end smoke tests, no duplicates | **Real** | `scripts/ha-check.sh` (Compose with 2 replicas each) |
+| Alertmanager routing | **Not yet** | |

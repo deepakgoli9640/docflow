@@ -146,11 +146,19 @@ java scripts/load/LoadTest.java --rate 40 --duration 60 --merchants 8   # JDK on
 
 Results and what limits throughput: [docs/load-test-report.md](docs/load-test-report.md).
 
+## Kubernetes and high availability
+
+A Helm chart ([deploy/helm/hpg](deploy/helm/hpg)) runs every service with 2+ replicas, autoscaling,
+disruption budgets, health probes, zero-downtime rolling updates, NetworkPolicies and hardened pods;
+PostgreSQL (CloudNativePG, synchronous replica) and Kafka (Strimzi, 3 brokers) come from operators. See
+[deploy/k8s/README.md](deploy/k8s/README.md). `./scripts/ha-check.sh` runs the smoke tests against two replicas
+of every service.
+
 ## CI/CD
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) on every push and pull request:
 build and all tests (Testcontainers), a coverage table in the job summary (JaCoCo reports as artifacts) and
-a gitleaks secret scan. On `master` it also pushes an image per service to GitHub Container Registry:
+a gitleaks secret scan, and Kubernetes manifest validation (helm lint + kubeconform). On `master` it also pushes an image per service to GitHub Container Registry:
 `ghcr.io/<owner>/hpg-<service>:<commit>` and `:latest`.
 
 ### Payment provider

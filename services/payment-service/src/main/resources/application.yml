@@ -7,7 +7,7 @@ spring:
   application:
     name: payment-service
   datasource:
-    url: jdbc:postgresql://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:5432}/payment_db
+    url: jdbc:postgresql://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:5432}/payment_db?sslmode=${PAYMENT_DB_SSLMODE:prefer}
     username: ${PAYMENT_DB_USER:payment_app}
     password: ${PAYMENT_DB_PASSWORD:}
     hikari:
