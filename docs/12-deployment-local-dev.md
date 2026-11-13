@@ -47,7 +47,8 @@ hpg --profile infra up -d
 ./mvnw -DskipTests package
 hpg --profile infra --profile core up -d --build
 
-# The other services: --profile refund --profile transactions --profile notify   (recon / obs: later phases)
+# The other services: --profile refund --profile transactions --profile notify --profile recon --profile dashboard
+# Observability: --profile obs, with HPG_TRACE_EXPORT=true to send traces to Jaeger
 
 # Stop everything, keep data / wipe data
 hpg --profile "*" down
@@ -57,6 +58,11 @@ hpg --profile "*" down -v
 Measured in Phase 3 (`docker stats` after both smoke tests): api-gateway 225 MiB, merchant-service
 272 MiB, payment-service 262 MiB, postgres 82 MiB, redis 5 MiB — about 850 MB for the `infra` + `core`
 profiles.
+
+Measured in Phase 7 with every profile (`docker stats` after the smoke tests): the six services 285–315 MiB
+each, gateway 263 MiB, Kafka 404 MiB, PostgreSQL 144 MiB, Prometheus 55 MiB, Grafana 58 MiB, Jaeger 53 MiB,
+Mailpit, Redis and the dashboard under 15 MiB each: about **2.8 GB** in total. The `obs` profile adds about
+170 MB.
 
 Measured with every implemented service (`infra core refund transactions notify`, after
 `smoke-test-phase4.sh`): gateway 205 MiB, merchant 246, payment 284, refund 263, transaction 258,

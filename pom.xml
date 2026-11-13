@@ -26,6 +26,7 @@
         <module>platform/persistence</module>
         <module>platform/event-contracts</module>
         <module>platform/messaging</module>
+        <module>platform/observability</module>
         <module>services/merchant-service</module>
         <module>services/payment-service</module>
         <module>services/refund-service</module>
@@ -82,6 +83,11 @@
             <dependency>
                 <groupId>com.hpg</groupId>
                 <artifactId>hpg-messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hpg</groupId>
+                <artifactId>hpg-observability</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

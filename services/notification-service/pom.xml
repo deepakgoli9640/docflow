@@ -21,6 +21,10 @@
         </dependency>
         <dependency>
             <groupId>com.hpg</groupId>
+            <artifactId>hpg-observability</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hpg</groupId>
             <artifactId>hpg-persistence</artifactId>
         </dependency>
         <dependency>

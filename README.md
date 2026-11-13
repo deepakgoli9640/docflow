@@ -7,7 +7,8 @@ part of a bill. It handles payments, refunds, the ledger, notifications and reco
 Java 21 · Spring Boot 3.5 · Spring Cloud Gateway · Spring Security / Authorization Server ·
 PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 
-> **Status: Phases 2–6 complete**: the full service architecture runs end to end.
+> **Status: Phases 2–7 complete**: the full service architecture runs end to end, with tenant-isolation
+> checks, PII-masked JSON logs, metrics, distributed tracing across HTTP and Kafka, dashboards and alerts.
 >
 > ```
 > Hospital application ──> API Gateway (auth, routing, rate limiting)
@@ -77,6 +78,7 @@ docs/                        Architecture documentation
 ./mvnw -DskipTests package
 docker compose -f deploy/docker-compose.yml --profile infra --profile core \
   --profile refund --profile transactions --profile notify --profile recon --profile dashboard up -d --build
+#     add `--profile obs` (and HPG_TRACE_EXPORT=true) for Prometheus, Grafana and Jaeger (~170 MB more)
 ./scripts/seed-demo-data.sh       # optional: demo data + sign-in details for the dashboard
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
@@ -90,6 +92,7 @@ docker compose -f deploy/docker-compose.yml --profile infra up -d
 ./scripts/smoke-test-phase3.sh
 ./scripts/smoke-test-phase4.sh    # payment -> Kafka -> refund, transactions, notifications
 ./scripts/smoke-test-phase6.sh    # ledger -> reconciliation against a settlement CSV
+./scripts/smoke-test-phase7.sh    # tenant isolation, role matrix, PII-free logs with trace ids
 
 # Stop (add -v to also delete the database volume)
 docker compose -f deploy/docker-compose.yml --profile '*' down
@@ -106,6 +109,9 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | http://localhost:8085/swagger-ui.html | notification-service OpenAPI / Swagger UI |
 | http://localhost:8086/swagger-ui.html | reconciliation-service OpenAPI / Swagger UI |
 | http://localhost:8025 | Mailpit: every email the system sends locally |
+| http://localhost:3000 | Grafana (`obs` profile): payments, provider, event pipeline, recon & ledger dashboards |
+| http://localhost:9090 | Prometheus (`obs` profile): targets and alert rules |
+| http://localhost:16686 | Jaeger (`obs` profile, `HPG_TRACE_EXPORT=true`): traces across gateway, services and Kafka |
 | http://localhost:8080/checkout/{token} | Hosted checkout page (the `checkoutUrl` of a payment) |
 
 Run a single module's tests: `./mvnw -pl services/merchant-service -am verify`.

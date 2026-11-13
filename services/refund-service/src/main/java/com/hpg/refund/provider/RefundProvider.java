@@ -29,4 +29,9 @@ public interface RefundProvider {
 
     /** @return the refund carried by a refund webhook; empty for other event types */
     Optional<ProviderRefund> parseWebhook(byte[] rawBody);
+
+    /** When the provider created the webhook event, if it says (replay protection). */
+    default java.time.Instant webhookCreatedAt(byte[] rawBody) {
+        return null;
+    }
 }

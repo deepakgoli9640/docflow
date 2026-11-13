@@ -121,7 +121,7 @@ public class NotificationIntake {
 
     private int save(Notification n) {
         notifications.save(n);
-        meters.counter("notifications.created", "channel", n.getChannel().name(), "type", n.getPublicEventType())
+        meters.counter("notifications.queued", "channel", n.getChannel().name(), "type", n.getPublicEventType())
                 .increment();
         return 1;
     }
