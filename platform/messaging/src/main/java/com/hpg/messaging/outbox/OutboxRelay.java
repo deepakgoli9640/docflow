@@ -58,7 +58,8 @@ public class OutboxRelay implements SmartLifecycle {
         this.clock = clock;
     }
 
-    private record Row(long id, String eventId, String eventType, String topic, String key, String payload) {
+    private record Row(long id, String eventId, String eventType, String topic, String key, String payload,
+            String traceparent) {
     }
 
     /**
@@ -73,10 +74,10 @@ public class OutboxRelay implements SmartLifecycle {
                 return 0;
             }
             List<Row> rows = jdbc.query("""
-                            SELECT id, event_id, event_type, topic, message_key, payload::text
+                            SELECT id, event_id, event_type, topic, message_key, payload::text, payload->>'traceparent'
                             FROM outbox_events WHERE published_at IS NULL ORDER BY id LIMIT ?""",
                     (rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getString(5), rs.getString(6)),
+                            rs.getString(5), rs.getString(6), rs.getString(7)),
                     properties.batchSize());
             List<Object[]> done = new ArrayList<>();
             Timestamp now = Timestamp.from(clock.instant());
@@ -115,6 +116,11 @@ public class OutboxRelay implements SmartLifecycle {
         ProducerRecord<String, String> record = new ProducerRecord<>(row.topic(), row.key(), row.payload());
         record.headers().add(new RecordHeader("eventId", row.eventId().getBytes(StandardCharsets.UTF_8)));
         record.headers().add(new RecordHeader("eventType", row.eventType().getBytes(StandardCharsets.UTF_8)));
+        if (row.traceparent() != null) {
+            // Continues the trace of the request that wrote the event (W3C trace context); consumers' listener
+            // observations pick it up, so one trace spans request -> outbox -> Kafka -> consumers.
+            record.headers().add(new RecordHeader("traceparent", row.traceparent().getBytes(StandardCharsets.UTF_8)));
+        }
         kafka.send(record).get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
     }
 

@@ -21,6 +21,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.listener.RecordInterceptor;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 
 import java.time.Clock;
@@ -62,8 +65,9 @@ public class KafkaMessagingAutoConfiguration {
     @ConditionalOnMissingBean(CommonErrorHandler.class)
     @ConditionalOnBean(KafkaTemplate.class)
     public DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> template,
-            KafkaConsumerProperties properties) {
+            KafkaConsumerProperties properties, ObjectProvider<MeterRegistry> meters) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template, (record, ex) -> {
+            meters.ifAvailable(m -> m.counter("kafka.dlt.records", "topic", record.topic()).increment());
             Throwable cause = NestedExceptionUtils.getMostSpecificCause(ex);
             log.error("Dead-lettering record topic={} partition={} offset={} key={}: {}: {}", record.topic(),
                     record.partition(), record.offset(), record.key(), cause.getClass().getName(), cause.getMessage());
@@ -77,6 +81,13 @@ public class KafkaMessagingAutoConfiguration {
         DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, backOff);
         handler.addNotRetryableExceptions(NonRetryableEventException.class);
         return handler;
+    }
+
+    /** Puts the event's correlation id into the log context while a record is processed. */
+    @Bean
+    @ConditionalOnMissingBean(RecordInterceptor.class)
+    public RecordInterceptor<Object, Object> correlationIdRecordInterceptor(ObjectMapper mapper) {
+        return new CorrelationIdRecordInterceptor(mapper);
     }
 
     @Bean

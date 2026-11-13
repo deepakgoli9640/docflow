@@ -35,7 +35,7 @@ public class WebhookController {
         }
         return switch (webhooks.handle(eventId, signature, body)) {
             case INVALID_SIGNATURE -> ResponseEntity.status(401).build();
-            case DUPLICATE, IGNORED, APPLIED -> ResponseEntity.ok().build();
+            case DUPLICATE, IGNORED, STALE, APPLIED -> ResponseEntity.ok().build();
         };
     }
 }

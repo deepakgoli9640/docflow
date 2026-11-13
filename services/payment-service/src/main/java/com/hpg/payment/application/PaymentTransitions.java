@@ -34,6 +34,8 @@ public class PaymentTransitions {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentTransitions.class);
     /** Events that notification-service needs patient contact details for. */
+    private static final Set<PaymentStatus> TERMINAL = EnumSet.of(PaymentStatus.CAPTURED, PaymentStatus.FAILED,
+            PaymentStatus.CANCELLED, PaymentStatus.EXPIRED);
     private static final Set<PaymentStatus> CONTACT_EVENTS = EnumSet.of(PaymentStatus.CAPTURED, PaymentStatus.FAILED,
             PaymentStatus.EXPIRED);
 
@@ -58,7 +60,7 @@ public class PaymentTransitions {
         history.save(new PaymentStatusHistory(payment.getId(), null, PaymentStatus.CREATED,
                 TransitionSource.MERCHANT_API, null, causationId, Actors.current(), clock.instant()));
         publish(payment, PaymentEventType.PaymentInitiated, null, null, causationId);
-        meters.counter("payments.created", "capture_mode", payment.getCaptureMode().name()).increment();
+        meters.counter("payments.initiated", "capture_mode", payment.getCaptureMode().name()).increment();
     }
 
     /**
@@ -86,6 +88,13 @@ public class PaymentTransitions {
         }
         meters.counter("payments.transitions", "from", from.name(), "to", target.name(), "source", source.name())
                 .increment();
+        if (TERMINAL.contains(target)) {
+            meters.counter("payments.terminal", "status", target.name()).increment();
+        }
+        if (target == PaymentStatus.CAPTURED) {
+            meters.summary("payment.amount.captured", "currency", payment.amount().currency())
+                    .record(payment.amount().amount().doubleValue());
+        }
         if (payment.isLateCapture() && target == PaymentStatus.CAPTURED) {
             // Money arrived after we had given up on the payment. Not an error, but someone must look.
             log.warn("LATE CAPTURE paymentId={} merchantId={} previousStatus={}", payment.getId(),

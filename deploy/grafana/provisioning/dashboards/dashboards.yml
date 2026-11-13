@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: hpg
+    folder: HPG
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false     # dashboards are code: edit generate.py, not the UI
+    options:
+      path: /var/lib/grafana/dashboards

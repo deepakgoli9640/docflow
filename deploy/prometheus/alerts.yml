@@ -1,0 +1,61 @@
+# Alert rules from docs/10-observability.md §4. Alertmanager routing is out of scope locally:
+# alerts show in Prometheus (http://localhost:9090/alerts).
+groups:
+  - name: hpg
+    rules:
+      - alert: PaymentSuccessRateDrop
+        expr: |
+          sum(increase(payments_terminal_total{status="CAPTURED"}[15m]))
+            / sum(increase(payments_terminal_total[15m])) < 0.7
+          and sum(increase(payments_terminal_total[15m])) >= 20
+        labels: {severity: critical}
+        annotations:
+          summary: Capture success below 70% over 15 minutes
+      - alert: ProviderCircuitOpen
+        expr: max(resilience4j_circuitbreaker_state{state=~"open|forced_open"}) > 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: The payment provider circuit breaker is open
+      - alert: PaymentsStuck
+        expr: max(payments_stuck) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Payments in PROCESSING/UNKNOWN for more than 15 minutes
+      - alert: OutboxBacklog
+        expr: max by (application) (outbox_oldest_pending_age_seconds) > 120
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.application }}: oldest unpublished event older than 2 minutes (Kafka down?)"
+      - alert: ConsumerLagHigh
+        expr: max by (application) (kafka_consumer_fetch_manager_records_lag_max) > 1000
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.application }}: Kafka consumer lag above 1000"
+      - alert: DeadLetters
+        expr: sum by (topic) (increase(kafka_dlt_records_total[10m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Records dead-lettered from {{ $labels.topic }}"
+      - alert: LedgerIntegrityViolation
+        expr: max(ledger_integrity_violations) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: Ledger integrity check failing
+      - alert: LateCapture
+        expr: sum(increase(payments_late_capture_total[10m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Money captured after a payment had expired, failed or been cancelled
+      - alert: ReconNotRun
+        expr: (time() - max(recon_last_successful_run_timestamp > 0)) > 93600
+        labels: {severity: warning}
+        annotations:
+          summary: No successful reconciliation in 26 hours
+      - alert: ServiceDown
+        expr: up{job="hpg-services"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.instance }} is not answering scrapes"

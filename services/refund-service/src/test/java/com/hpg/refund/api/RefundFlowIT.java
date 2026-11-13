@@ -313,6 +313,25 @@ class RefundFlowIT {
     }
 
     @Test
+    void webhooksOlderThan48HoursAreAcknowledgedButNotApplied() throws Exception {
+        UUID paymentId = capturedPayment("100.00", "pay_O");
+        razorpay.stubFor(WireMock.post("/v1/payments/pay_O/refund").willReturn(okJson(refundJson("rfnd_O1", "pending", 5000,
+                "{{jsonPath request.body '$.receipt'}}")).withTransformers("response-template")));
+        String refundId = json.readTree(refund(paymentId, "50.00", "key-old-webhook").getResponse().getContentAsString())
+                .get("id").asText();
+
+        long threeDaysAgo = Instant.now().minus(Duration.ofDays(3)).getEpochSecond();
+        String body = "{\"entity\":\"event\",\"event\":\"refund.processed\",\"created_at\":" + threeDaysAgo
+                + ",\"payload\":{\"refund\":{\"entity\":" + refundJson("rfnd_O1", "processed", 5000, refundId) + "}}}";
+        mvc.perform(post("/webhooks/razorpay/refunds").header("X-Razorpay-Signature",
+                                HmacSignatures.hmacSha256Hex("test_webhook_secret", body.getBytes()))
+                        .header("X-Razorpay-Event-Id", "evt_replayed_O1").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/refunds/{id}", refundId).with(merchant()))
+                .andExpect(jsonPath("$.status").value("PROCESSING"));
+    }
+
+    @Test
     void unknownPaymentIsNotYetRefundable() throws Exception {
         MvcResult result = refund(UUID.randomUUID(), "10.00", "key-unknown-1");
         assertThat(result.getResponse().getStatus()).isEqualTo(409);

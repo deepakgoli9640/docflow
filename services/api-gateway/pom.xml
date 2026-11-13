@@ -20,6 +20,10 @@
         </dependency>
         <dependency>
             <groupId>com.hpg</groupId>
+            <artifactId>hpg-observability</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hpg</groupId>
             <artifactId>hpg-event-contracts</artifactId>
         </dependency>
         <dependency>

@@ -23,7 +23,7 @@ into events, webhooks and asynchronous retries hours later.
 
 | Metric | Type | Labels |
 |---|---|---|
-| `payments_created_total` | counter | `capture_mode` |
+| `payments_initiated_total` | counter | `capture_mode` |
 | `payments_transitions_total` | counter | `from`, `to`, `trigger` |
 | `payments_terminal_total` | counter | `status` (CAPTURED/FAILED/EXPIRED/CANCELLED) |
 | `payments_late_capture_total` | counter | — (alert on any) |

@@ -116,6 +116,16 @@ public class RazorpayRefundProvider implements RefundProvider {
         }
     }
 
+    @Override
+    public java.time.Instant webhookCreatedAt(byte[] rawBody) {
+        try {
+            JsonNode created = json.readTree(rawBody).path("created_at");
+            return created.isNumber() ? java.time.Instant.ofEpochSecond(created.asLong()) : null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     static long toMinorUnits(Money amount) {
         return amount.amount().movePointRight(2).longValueExact();
     }

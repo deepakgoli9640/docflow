@@ -47,6 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(properties = {"hpg.payment.provider=simulated", "spring.kafka.admin.auto-create=true"})
 @AutoConfigureMockMvc
+@org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability(metrics = false)
 @ActiveProfiles("test")
 @Import({PostgresTestContainer.class, KafkaTestContainer.class})
 class OutboxRelayIT {
@@ -118,5 +119,10 @@ class OutboxRelayIT {
         assertThat(captured.at("/payload/providerPaymentId").asText()).startsWith("pay_sim_");
         assertThat(new String(records.get(1).headers().lastHeader("eventType").value(), StandardCharsets.UTF_8))
                 .isEqualTo("PaymentCaptured");
+        // The event carries the trace of the request that created the payment (W3C trace context), so the
+        // consumers' spans join the same trace.
+        String traceparent = new String(records.get(0).headers().lastHeader("traceparent").value(), StandardCharsets.UTF_8);
+        assertThat(traceparent).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]");
+        assertThat(json.readTree(records.get(0).value()).get("traceparent").asText()).isEqualTo(traceparent);
     }
 }

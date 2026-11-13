@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.function.Supplier;
 import java.util.UUID;
 
 /**
@@ -22,12 +23,23 @@ public class OutboxWriter {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final String producer;
+    private final Supplier<String> traceparent;
 
     public OutboxWriter(OutboxEventRepository repository, ObjectMapper objectMapper, Clock clock, String producer) {
+        this(repository, objectMapper, clock, producer, () -> null);
+    }
+
+    /**
+     * @param traceparent the W3C {@code traceparent} of the current span (null when not tracing); stored with
+     *                    the event so the relay can continue the trace in Kafka, long after the request ended
+     */
+    public OutboxWriter(OutboxEventRepository repository, ObjectMapper objectMapper, Clock clock, String producer,
+            Supplier<String> traceparent) {
         this.repository = repository;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.producer = producer;
+        this.traceparent = traceparent;
     }
 
     /**
@@ -60,6 +72,10 @@ public class OutboxWriter {
                 aggregateType, aggregateId, aggregateVersion, merchantId, MDC.get(CorrelationId.MDC_KEY), causationId,
                 payload);
         JsonNode json = objectMapper.valueToTree(envelope);
+        String tp = traceparent.get();
+        if (tp != null && json instanceof com.fasterxml.jackson.databind.node.ObjectNode object) {
+            object.put("traceparent", tp); // additive field; consumers ignore unknown properties
+        }
         repository.save(new OutboxEvent(envelope.eventId(), aggregateType, aggregateId, eventType, topic, messageKey,
                 json, envelope.occurredAt()));
         return envelope;

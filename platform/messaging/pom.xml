@@ -38,6 +38,11 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
         </dependency>
+        <dependency>
+            <!-- API only: the trace context is copied into outbox events when a tracer is present -->
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

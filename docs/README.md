@@ -1,7 +1,8 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phases 4, 5 and 6 complete**: Kafka, refund-service, transaction-service (history, status, ledger),
-> notification-service and reconciliation-service run end to end behind the gateway. Phases 7–8 are still design.
+> Status: **Phases 2–7 complete**: Kafka, refund-service, transaction-service (history, status, ledger),
+> notification-service and reconciliation-service run end to end behind the gateway, with security hardening
+> and observability (Phase 7). Phase 8 is still design.
 > Note: the "ledger-service" of the design documents is implemented as **transaction-service**. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
@@ -57,7 +58,7 @@ designed but not built.
 | Gateway routing, correlation IDs, Problem Details errors, Redis rate limiting | **Real** | Routes to merchant, payment, refund, transaction and notification services |
 | Gateway deny-list for suspended merchants | **Real** | Redis, fed by `merchant.snapshots.v1`: a suspended merchant's existing tokens are refused within seconds (fails open if Redis is down; payment/refund replicas still refuse). |
 | Internal webhook-config endpoint for notification-service | **Real** | Called with a client-credentials token (SERVICE role), cached 60 s |
-| Docker images, Compose profiles `infra` (+Kafka) / `core` / `refund` / `transactions` / `notify`, per-service DB users | **Real** | Observability profile in Phase 7 |
+| Docker images, Compose profiles `infra` (+Kafka) / `core` / `refund` / `transactions` / `notify` / `recon` / `dashboard` / `obs`, per-service DB users | **Real** | |
 | CI (GitHub Actions: build + all tests) | **Real** | Image publishing, coverage, secret scanning in Phase 8 |
 | Payment initiation, status, list, capture, cancel; state machine (all 243 transitions tested) | **Real** | Phase 3 |
 | Idempotency-Key (Postgres, same transaction), duplicate-bill protection, daily limit with advisory lock | **Real** | Concurrency-tested |
@@ -83,3 +84,10 @@ designed but not built.
 | Reconciliation: internal replica from ledger events, streaming CSV upload (SHA-256 dedupe, malformed-row capture), matching engine (all statuses incl. cross-day duplicates), batches, discrepancy workflow, daily report JSON/CSV, `ReconciliationCompleted` | **Real** | reconciliation-service; dashboard page for OPS |
 | Reconciliation from the Razorpay settlement API (scheduled 06:00 IST + on demand) | **Real code, tested against WireMock only** | Needs Razorpay keys; with the simulated provider use CSV uploads |
 | Settlement postings to the ledger, finance email on `ReconciliationCompleted` | **Not yet** | |
+| Tenant isolation and role matrix across every service, through the gateway | **Real** | `scripts/smoke-test-phase7.sh` (41 checks) plus per-service integration tests |
+| Structured JSON logs (ECS) with trace id, span id, correlation id; PII masking (emails, phones, card numbers, credentials) | **Real** | `platform/observability`; masking applies to structured (JSON) logs only |
+| Metrics: payments, refunds, provider outcomes, outbox backlog, DLT records, stuck payments, ledger integrity, webhook signature failures | **Real** | Prometheus scrape of every service and the gateway |
+| Distributed tracing (OpenTelemetry, OTLP → Jaeger) across HTTP, the outbox and Kafka consumers | **Real** | Export off by default (`HPG_TRACE_EXPORT=true` turns it on); W3C `traceparent` carried in the outbox |
+| Grafana dashboards as code (4), Prometheus alert rules (10) | **Real** | Compose profile `obs`; no Alertmanager routing (alerts visible in Prometheus) |
+| Webhook replay protection: events older than 48 h acknowledged but not applied | **Real** | payment- and refund-service |
+| Local TLS | **Not yet** | Plain HTTP locally; TLS terminates at the ingress in production |

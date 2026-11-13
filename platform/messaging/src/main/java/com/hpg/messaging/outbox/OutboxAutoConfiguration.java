@@ -3,6 +3,10 @@ package com.hpg.messaging.outbox;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.binder.MeterBinder;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
@@ -32,15 +36,33 @@ public class OutboxAutoConfiguration {
 
     @Bean
     public OutboxWriter outboxWriter(OutboxEventRepository repository, ObjectMapper objectMapper, Clock clock,
-            @Value("${spring.application.name}") String producer) {
-        return new OutboxWriter(repository, objectMapper, clock, producer);
+            @Value("${spring.application.name}") String producer, ObjectProvider<Tracer> tracer) {
+        return new OutboxWriter(repository, objectMapper, clock, producer, () -> {
+            Tracer t = tracer.getIfAvailable();
+            Span span = t == null ? null : t.currentSpan();
+            if (span == null) {
+                return null;
+            }
+            TraceContext c = span.context();
+            return "00-" + c.traceId() + "-" + c.spanId() + "-" + (Boolean.TRUE.equals(c.sampled()) ? "01" : "00");
+        });
     }
 
-    /** Pending (unpublished) events: grows when Kafka is unreachable. Alert on it. */
+    /**
+     * Pending (unpublished) events and the age of the oldest one: both grow when Kafka is unreachable
+     * ({@code OutboxBacklog} alert at 2 minutes).
+     */
     @Bean
-    public MeterBinder outboxMetrics(OutboxEventRepository repository) {
-        return registry -> Gauge.builder("outbox.pending.events", repository,
-                OutboxEventRepository::countByPublishedAtIsNull).register(registry);
+    public MeterBinder outboxMetrics(OutboxEventRepository repository, JdbcTemplate jdbc) {
+        return registry -> {
+            Gauge.builder("outbox.pending.events", repository, OutboxEventRepository::countByPublishedAtIsNull)
+                    .register(registry);
+            Gauge.builder("outbox.oldest.pending.age.seconds", jdbc, j -> {
+                Double age = j.queryForObject("SELECT COALESCE(EXTRACT(EPOCH FROM (now() - min(created_at))), 0) "
+                        + "FROM outbox_events WHERE published_at IS NULL", Double.class);
+                return age == null ? 0 : age;
+            }).register(registry);
+        };
     }
 
     @Configuration(proxyBeanMethods = false)

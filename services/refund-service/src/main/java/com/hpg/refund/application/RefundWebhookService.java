@@ -19,26 +19,32 @@ public class RefundWebhookService {
 
     private static final Logger log = LoggerFactory.getLogger(RefundWebhookService.class);
 
-    public enum Outcome { INVALID_SIGNATURE, DUPLICATE, IGNORED, APPLIED }
+    public enum Outcome { INVALID_SIGNATURE, DUPLICATE, IGNORED, STALE, APPLIED }
+
+    /** Razorpay retries webhooks for about a day; anything older is a replay (docs/09-security.md §4). */
+    static final java.time.Duration MAX_AGE = java.time.Duration.ofHours(48);
 
     private final RefundProvider provider;
     private final WebhookInbox inbox;
     private final RefundRepository refunds;
     private final RefundProcessor processor;
     private final Clock clock;
+    private final io.micrometer.core.instrument.MeterRegistry meters;
 
     public RefundWebhookService(RefundProvider provider, WebhookInbox inbox, RefundRepository refunds,
-            RefundProcessor processor, Clock clock) {
+            RefundProcessor processor, Clock clock, io.micrometer.core.instrument.MeterRegistry meters) {
         this.provider = provider;
         this.inbox = inbox;
         this.refunds = refunds;
         this.processor = processor;
         this.clock = clock;
+        this.meters = meters;
     }
 
     public Outcome handle(String eventId, String signature, byte[] body) {
         if (!provider.verifyWebhookSignature(body, signature)) {
             log.warn("Rejected refund webhook with invalid signature eventId={}", eventId);
+            meters.counter("webhooks.signature_failures", "provider", provider.name()).increment();
             return Outcome.INVALID_SIGNATURE;
         }
         Optional<ProviderRefund> parsed = provider.parseWebhook(body);
@@ -46,6 +52,12 @@ public class RefundWebhookService {
                 .orElse("other");
         if (!inbox.record(provider.name(), eventId, eventType, body, clock.instant())) {
             return Outcome.DUPLICATE;
+        }
+        java.time.Instant createdAt = provider.webhookCreatedAt(body);
+        if (createdAt != null && createdAt.isBefore(clock.instant().minus(MAX_AGE))) {
+            log.warn("Ignoring refund webhook {} created {} (older than {}): possible replay", eventId, createdAt, MAX_AGE);
+            inbox.outcome(provider.name(), eventId, "STALE");
+            return Outcome.STALE;
         }
         Optional<Refund> refund = parsed.flatMap(this::findRefund);
         if (refund.isEmpty()) {

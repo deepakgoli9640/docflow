@@ -25,6 +25,7 @@ sed -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(rand)|" \
     -e "s|^HPG_ENCRYPTION_KEY=.*|HPG_ENCRYPTION_KEY=$(openssl rand -base64 32)|" \
     -e "s|^HPG_OPS_CLIENT_SECRET=.*|HPG_OPS_CLIENT_SECRET=$(rand)|" \
     -e "s|^HPG_NOTIFICATION_CLIENT_SECRET=.*|HPG_NOTIFICATION_CLIENT_SECRET=$(rand)|" \
+    -e "s|^GF_SECURITY_ADMIN_PASSWORD=.*|GF_SECURITY_ADMIN_PASSWORD=$(rand)|" \
     deploy/env/.env.example > "$target"
 chmod 600 "$target"
 echo "Wrote $target with random secrets."

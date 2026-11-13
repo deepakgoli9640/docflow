@@ -51,7 +51,7 @@ public class RefundTransitions {
         history.save(new RefundStatusHistory(refund.getId(), null, RefundStatus.CREATED, refund.getReason(),
                 Actors.current(), clock.instant()));
         publish(refund, payment, RefundEventType.RefundInitiated, causationId);
-        meters.counter("refunds.created").increment();
+        meters.counter("refunds.initiated").increment();
     }
 
     /** @return true if the refund changed state */

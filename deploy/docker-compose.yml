@@ -6,9 +6,9 @@
 #   ... --profile refund --profile transactions --profile notify                     # + the other services
 #   ... --profile recon                                                              # reconciliation-service
 #   ... --profile dashboard                                                          # web dashboard on :8090
+#   HPG_TRACE_EXPORT=true ... --profile obs                                          # Prometheus, Grafana, Jaeger
 #
 # Prerequisites:  ./scripts/init-env.sh   and   ./mvnw -DskipTests package
-# Observability (Prometheus/Grafana/Jaeger) arrives in Phase 7.
 
 name: hpg
 
@@ -95,6 +95,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       MERCHANT_DB_HOST: postgres
       HPG_TOKEN_ISSUER: http://merchant-service:8081
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
@@ -121,6 +123,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       PAYMENT_DB_HOST: postgres
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_TOKEN_ISSUER: http://merchant-service:8081
@@ -149,6 +153,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       REFUND_DB_HOST: postgres
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_TOKEN_ISSUER: http://merchant-service:8081
@@ -176,6 +182,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       TRANSACTION_DB_HOST: postgres
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_TOKEN_ISSUER: http://merchant-service:8081
@@ -203,6 +211,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       NOTIFICATION_DB_HOST: postgres
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_TOKEN_ISSUER: http://merchant-service:8081
@@ -234,6 +244,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       RECON_DB_HOST: postgres
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_TOKEN_ISSUER: http://merchant-service:8081
@@ -263,6 +275,8 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://jaeger:4318/v1/traces
+      HPG_TRACE_EXPORT: ${HPG_TRACE_EXPORT:-false}   # true with --profile obs
       REDIS_HOST: redis
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092   # merchant snapshots feed the suspended-merchant deny-list
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
@@ -302,6 +316,43 @@ services:
       api-gateway:
         condition: service_healthy
     mem_limit: 32m
+
+  # --- observability (profile "obs"): docs/10-observability.md ------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    profiles: [obs]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:16686:16686"   # Jaeger UI; services send spans to jaeger:4318 (OTLP/HTTP) inside the network
+    mem_limit: 256m
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: [obs]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=3d"]
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    mem_limit: 256m
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: [obs]
+    env_file: ./env/.env               # GF_SECURITY_ADMIN_PASSWORD
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"   # local only: dashboards readable without signing in
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/hpg-payments.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [prometheus, jaeger]
+    mem_limit: 192m
 
 volumes:
   postgres-data:
