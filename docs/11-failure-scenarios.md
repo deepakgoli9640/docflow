@@ -16,18 +16,25 @@ test proves it (test names are the plan for Phase 8; many are written earlier wi
 | 9 | **Refund exceeds captured amount** | Over-refund, including via concurrent partial refunds | Atomic conditional `UPDATE` reservation + DB `CHECK` constraint. | `RefundValidationTest` (unit), `ConcurrentPartialRefundsIT`: 10 parallel refunds of 30% each on one payment → exactly 3 succeed. |
 | 10 | **Settlement report has missing or duplicate transactions** | Silent money leakage | Matching engine statuses `MISSING_IN_PROVIDER`, `MISSING_IN_INTERNAL_SYSTEM`, `DUPLICATE`; duplicate file upload rejected by checksum; nothing auto-corrected. | `ReconciliationMatcherTest` (table-driven unit tests), `SettlementCsvIT` with sample files. |
 
-### Implemented so far (Phase 3)
+### Automated tests (complete as of Phase 8)
+
+The planned test names above were the design; these are the tests that exist and prove each scenario.
 
 | # | Automated test(s) |
 |---|---|
-| 1 | `PaymentApiIT.Creation#concurrentRequestsWithTheSameKeyCreateExactlyOnePayment` (12 threads), `#sameIdempotencyKeyReplays…`, `#secondLivePaymentForTheSameBillIsRejected…`, `#secondCaptureOnTheSameOrderIsFlaggedAsDuplicateCharge` |
-| 2 | `RazorpayPaymentProviderTest#slowResponseIsATimeoutWithUnknownOutcome`, `#timedOutCaptureIsNeverRetried`, `#circuitOpensAfterRepeatedFailures…`; `PaymentApiIT.Lifecycle#captureTimeoutBecomesUnknownAndIsResolvedByVerification`, `Creation#providerOutageAtCreationLeavesPaymentCreatedAndRecoveryCompletesIt` |
+| 1 | `PaymentApiIT.Creation#concurrentRequestsWithTheSameKeyCreateExactlyOnePayment` (12 threads), `#sameIdempotencyKeyReplays…`, `#secondLivePaymentForTheSameBillIsRejected…`, `Webhooks#secondCaptureOnTheSameOrderIsFlaggedAsDuplicateCharge` |
+| 2 | `RazorpayPaymentProviderTest#slowResponseIsATimeoutWithUnknownOutcome`, `#timedOutCaptureIsNeverRetried`, `#circuitOpensAfterRepeatedFailures…`; `PaymentApiIT.Lifecycle#captureTimeoutBecomesUnknownAndIsResolvedByVerification`, `Creation#providerOutageAtCreationLeavesPaymentCreatedAndRecoveryCompletesIt`; `RefundFlowIT#timedOutRefundIsLookedUpBeforeAnyRetry` |
 | 3 | `PaymentApiIT.Checkout#lostProviderResponseIsRecoveredByPolling`, `#paymentWithNoCallbackAndNoWebhookIsFoundByPolling`, `Lifecycle#expiryAsksTheProviderFirst`, `#captureAfterExpiryIsAppliedAndFlaggedAsLate`; `SimulatedProviderIT#lostCallbackIsRecoveredByPolling` |
-| 4 | `PaymentApiIT.Webhooks#duplicateWebhookIsAcknowledgedButProcessedOnce` |
-| 5 | `PaymentApiIT.Webhooks#outOfOrderWebhookDoesNotMoveThePaymentBackwards`; `PaymentStateMachineTest` |
-| 6, 7 | Phase 4 (Kafka). The outbox is already written in the same transaction (asserted in `PaymentApiIT`). |
-| 8 | `GlobalExceptionHandlerTest#databaseUnavailableIs503WithRetryAfter` (handler level); container-stop test in Phase 8 |
-| 9, 10 | Phases 5 and 6 |
+| 4 | `PaymentApiIT.Webhooks#duplicateWebhookIsAcknowledgedButProcessedOnce`; `RefundFlowIT#webhooksOlderThan48HoursAreAcknowledgedButNotApplied` (replay window) |
+| 5 | `PaymentApiIT.Webhooks#outOfOrderWebhookDoesNotMoveThePaymentBackwards`; `PaymentStateMachineTest` (all 243 transitions) |
+| 6 | `OutboxSurvivesKafkaOutageIT` (pauses the Kafka container: payments still `201`, nothing published or lost, every event delivered in order per payment after Kafka returns); `OutboxRelayIT` |
+| 7 | `TransactionFlowIT#duplicateEventsAreBookedOnce`, `NotificationFlowIT#completedRefundNotifiesTheHospitalOnce` (same event delivered twice) |
+| 8 | `DatabaseDownIT` (stops the Postgres container: `503` + `Retry-After` within the 3 s pool timeout, the retried request with the same Idempotency-Key creates exactly one payment once the database is back, no restart needed); `GlobalExceptionHandlerTest` |
+| 9 | `RefundFlowIT#concurrentRefundsNeverExceedTheCapturedAmount`, `#partialRefundIsProcessedByWebhookAndCannotExceedTheCapturedAmount`, `#rejectedRefundReleasesTheReservation` |
+| 10 | `MatchingEngineTest` (table-driven, every status incl. cross-day duplicates), `SettlementCsvParserTest`, `ReconciliationFlowIT` (sample files, duplicate upload `409`) |
+
+`DatabaseDownIT` found a real bug: a stopped database surfaced as "Unable to rollback" on a dead pooled
+connection and was answered `500`. Connection failures anywhere in the cause chain are now `503`.
 
 ## Recovery workflows (summary)
 
@@ -54,6 +61,7 @@ There is no distributed transaction across services. Instead:
 
 ## Load testing (Phase 8)
 
-A k6 script (lightweight, runs outside Docker) for `POST /payments` + `GET /payments/{id}` against
-the `provider-sim` profile, reporting p50/p95/p99 and error rate. Results will be reported as
-measured on your laptop, with the caveat that laptop numbers say nothing about production capacity.
+`scripts/load/payments.js` (k6) and `scripts/load/LoadTest.java` (JDK only) run `POST /payments` +
+`GET /payments/{id}` at a fixed arrival rate against the simulated provider. Measured results and the
+bottleneck analysis: [load-test-report.md](load-test-report.md). Under overload the service answers `503`
+with `Retry-After`; nothing is lost or half-written.

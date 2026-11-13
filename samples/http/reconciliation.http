@@ -1,0 +1,55 @@
+### Healthcare Payment Gateway - reconciliation (operations only)
+### Prerequisites: the stack with --profile recon, and an OPS token:
+###   curl -s -u "ops-console:$HPG_OPS_CLIENT_SECRET" -d grant_type=client_credentials localhost:8080/oauth2/token
+### Sample settlement files: samples/settlement/ (README explains each). scripts/smoke-test-phase6.sh runs all of this.
+
+@gw = http://localhost:8080
+
+### 1. Upload a provider settlement CSV for a business date -> 202 + Location of the batch.
+###    The same file again -> 409 DUPLICATE_SETTLEMENT_FILE (SHA-256 of the content).
+POST {{gw}}/api/v1/reconciliation/settlement-files?businessDate={{businessDate}}
+Authorization: Bearer {{opsToken}}
+Content-Type: multipart/form-data; boundary=hpg
+
+--hpg
+Content-Disposition: form-data; name="file"; filename="discrepancies.csv"
+Content-Type: text/csv
+
+< ../settlement/discrepancies.csv
+--hpg--
+
+### 2. Or reconcile against the Razorpay settlement API (needs Razorpay keys; 422 with the simulated provider)
+POST {{gw}}/api/v1/reconciliation/runs
+Authorization: Bearer {{opsToken}}
+Content-Type: application/json
+
+{ "businessDate": "{{businessDate}}" }
+
+### 3. Poll the batch until COMPLETED: counts per status
+GET {{gw}}/api/v1/reconciliation/batches/{{batchId}}
+Authorization: Bearer {{opsToken}}
+
+### 4. Open discrepancies of a batch (MATCHED, AMOUNT_MISMATCH, MISSING_IN_PROVIDER, MISSING_IN_INTERNAL_SYSTEM,
+###    DUPLICATE, ...)
+GET {{gw}}/api/v1/reconciliation/batches/{{batchId}}/records?resolutionStatus=OPEN
+Authorization: Bearer {{opsToken}}
+
+### 5. Take one into review, then resolve it. Resolving changes the reconciliation record only, never money.
+POST {{gw}}/api/v1/reconciliation/records/{{recordId}}/review
+Authorization: Bearer {{opsToken}}
+
+###
+POST {{gw}}/api/v1/reconciliation/records/{{recordId}}/resolve
+Authorization: Bearer {{opsToken}}
+Content-Type: application/json
+
+{ "resolutionType": "TIMING_DIFFERENCE", "note": "Settled in the next day's report" }
+
+### 6. Daily report (JSON, or CSV with Accept: text/csv)
+GET {{gw}}/api/v1/reconciliation/reports/daily?date={{businessDate}}
+Authorization: Bearer {{opsToken}}
+Accept: text/csv
+
+### 7. A hospital token is refused (403): reconciliation is an operations function
+GET {{gw}}/api/v1/reconciliation/batches
+Authorization: Bearer {{token}}

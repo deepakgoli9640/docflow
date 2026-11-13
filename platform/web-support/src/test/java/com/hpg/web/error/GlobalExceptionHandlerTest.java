@@ -60,6 +60,23 @@ class GlobalExceptionHandlerTest {
             throw new CannotCreateTransactionException("Connection refused");
         }
 
+        @GetMapping("/db-connection-lost")
+        void dbConnectionLost() {
+            throw new IllegalStateException("Unable to rollback against JDBC Connection",
+                    new java.sql.SQLException("Connection is closed"));
+        }
+
+        @GetMapping("/db-io-error")
+        void dbIoError() {
+            throw new IllegalStateException("query failed",
+                    new java.sql.SQLException("An I/O error occurred while sending to the backend.", "08006"));
+        }
+
+        @GetMapping("/sql-syntax")
+        void sqlSyntax() {
+            throw new IllegalStateException("bad query", new java.sql.SQLException("syntax error", "42601"));
+        }
+
         @GetMapping("/lock")
         void lock() {
             throw new OptimisticLockingFailureException("version mismatch");
@@ -108,6 +125,25 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().string("Retry-After", "5"))
                 .andExpect(jsonPath("$.errorCode").value("SERVICE_UNAVAILABLE"));
+    }
+
+    @Test
+    void brokenConnectionSurfacingAsAnotherExceptionIsStill503() throws Exception {
+        // What a stopped database looked like in DatabaseDownIT: the rollback on a dead pooled connection failed.
+        mvc.perform(get("/db-connection-lost"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "5"))
+                .andExpect(jsonPath("$.errorCode").value("SERVICE_UNAVAILABLE"));
+    }
+
+    @Test
+    void connectionExceptionSqlStateIs503() throws Exception {
+        mvc.perform(get("/db-io-error")).andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void otherSqlErrorsStay500() throws Exception {
+        mvc.perform(get("/sql-syntax")).andExpect(status().isInternalServerError());
     }
 
     @Test

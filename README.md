@@ -7,8 +7,10 @@ part of a bill. It handles payments, refunds, the ledger, notifications and reco
 Java 21 · Spring Boot 3.5 · Spring Cloud Gateway · Spring Security / Authorization Server ·
 PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 
-> **Status: Phases 2–7 complete**: the full service architecture runs end to end, with tenant-isolation
-> checks, PII-masked JSON logs, metrics, distributed tracing across HTTP and Kafka, dashboards and alerts.
+> **Status: all phases complete (2–8)**: the full service architecture runs end to end, with tenant-isolation
+> checks, PII-masked JSON logs, metrics, distributed tracing across HTTP and Kafka, dashboards and alerts,
+> an automated test for every failure scenario, CI with coverage, secret scanning and image publishing, and a
+> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md).
 >
 > ```
 > Hospital application ──> API Gateway (auth, routing, rate limiting)
@@ -132,7 +134,24 @@ curl -s -H "Authorization: Bearer $TOKEN" $GW/api/v1/merchants/me | jq
 
 More requests: [samples/http/merchant.http](samples/http/merchant.http),
 [samples/http/payment.http](samples/http/payment.http),
-[samples/http/refund-transaction-notification.http](samples/http/refund-transaction-notification.http).
+[samples/http/refund-transaction-notification.http](samples/http/refund-transaction-notification.http),
+[samples/http/reconciliation.http](samples/http/reconciliation.http).
+
+## Load test
+
+```bash
+java scripts/load/LoadTest.java --rate 40 --duration 60 --merchants 8   # JDK only
+# or: k6 run -e OPS_SECRET=... scripts/load/payments.js
+```
+
+Results and what limits throughput: [docs/load-test-report.md](docs/load-test-report.md).
+
+## CI/CD
+
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) on every push and pull request:
+build and all tests (Testcontainers), a coverage table in the job summary (JaCoCo reports as artifacts) and
+a gitleaks secret scan. On `master` it also pushes an image per service to GitHub Container Registry:
+`ghcr.io/<owner>/hpg-<service>:<commit>` and `:latest`.
 
 ### Payment provider
 

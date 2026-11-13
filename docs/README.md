@@ -1,8 +1,8 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phases 2–7 complete**: Kafka, refund-service, transaction-service (history, status, ledger),
-> notification-service and reconciliation-service run end to end behind the gateway, with security hardening
-> and observability (Phase 7). Phase 8 is still design.
+> Status: **all phases complete (2–8)**: every service runs end to end behind the gateway, with security
+> hardening, observability, a test for every failure scenario, CI/CD and a measured load test. Remaining
+> gaps are listed in the table below (*Not yet*).
 > Note: the "ledger-service" of the design documents is implemented as **transaction-service**. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
@@ -36,6 +36,8 @@ contact details.
 | 11 | [Failure scenarios](11-failure-scenarios.md) | The 10 required failure scenarios and how each is handled and tested |
 | 12 | [Deployment & local dev](12-deployment-local-dev.md) | Docker Compose profiles for an 8 GB laptop, CI/CD |
 | 13 | [Implementation plan](13-implementation-plan.md) | Phases 2–8, deliverables, exit criteria |
+| — | [Load test report](load-test-report.md) | Measured latency and throughput, bottleneck, how to raise it |
+| — | [Interview guide](interview-guide.md) | Pitch, deep dives, likely questions, honest limitations |
 | — | [Decision log](decisions.md) | Every significant decision, the alternatives, and why |
 | — | [Razorpay sandbox checklist](razorpay-sandbox-checklist.md) | What still has to be verified against the real Razorpay sandbox |
 
@@ -59,7 +61,7 @@ designed but not built.
 | Gateway deny-list for suspended merchants | **Real** | Redis, fed by `merchant.snapshots.v1`: a suspended merchant's existing tokens are refused within seconds (fails open if Redis is down; payment/refund replicas still refuse). |
 | Internal webhook-config endpoint for notification-service | **Real** | Called with a client-credentials token (SERVICE role), cached 60 s |
 | Docker images, Compose profiles `infra` (+Kafka) / `core` / `refund` / `transactions` / `notify` / `recon` / `dashboard` / `obs`, per-service DB users | **Real** | |
-| CI (GitHub Actions: build + all tests) | **Real** | Image publishing, coverage, secret scanning in Phase 8 |
+| CI/CD (GitHub Actions: build + all tests, JaCoCo coverage summary, gitleaks, images to GHCR on master) | **Real** | |
 | Payment initiation, status, list, capture, cancel; state machine (all 243 transitions tested) | **Real** | Phase 3 |
 | Idempotency-Key (Postgres, same transaction), duplicate-bill protection, daily limit with advisory lock | **Real** | Concurrency-tested |
 | Optimistic locking with transaction re-run (callback / webhook / poll races) | **Real** | |
@@ -91,3 +93,6 @@ designed but not built.
 | Grafana dashboards as code (4), Prometheus alert rules (10) | **Real** | Compose profile `obs`; no Alertmanager routing (alerts visible in Prometheus) |
 | Webhook replay protection: events older than 48 h acknowledged but not applied | **Real** | payment- and refund-service |
 | Local TLS | **Not yet** | Plain HTTP locally; TLS terminates at the ingress in production |
+| Failure-scenario tests: Kafka outage (container paused), database outage (container stopped) | **Real** | Every scenario in [11](11-failure-scenarios.md) has an automated test |
+| Load test (k6 script + JDK runner), measured report | **Real** | [load-test-report.md](load-test-report.md); single 4-vCPU machine |
+| Kubernetes manifests, Alertmanager routing, high availability | **Not yet** | Compose only |
