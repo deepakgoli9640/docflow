@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hpg.common.money.Money;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
+import com.hpg.events.dispute.DisputeEventPayload;
 import com.hpg.messaging.consumer.EventMessage;
 import com.hpg.notification.domain.Channel;
 import com.hpg.notification.domain.Notification;
@@ -43,6 +44,11 @@ public class NotificationIntake {
     private static final Map<String, String> REFUND_TYPES = Map.of(
             "RefundCompleted", "refund.completed",
             "RefundFailed", "refund.failed");
+    private static final Map<String, String> DISPUTE_TYPES = Map.of(
+            "DisputeOpened", "dispute.opened",
+            "DisputeFundsDeducted", "dispute.funds_deducted",
+            "DisputeFundsReinstated", "dispute.funds_reinstated",
+            "DisputeResolved", "dispute.resolved");
     private static final Set<String> PATIENT_EMAIL_EVENTS = Set.of("PaymentCaptured", "PaymentFailed", "PaymentExpired");
 
     private final NotificationRepository notifications;
@@ -101,6 +107,26 @@ public class NotificationIntake {
         putIfPresent(data, "failureCode", r.failureCode());
         putIfPresent(data, "failureReason", r.failureReason());
         return save(webhook(event, type, r.merchantId(), r.paymentId(), r.refundId(), data));
+    }
+
+    /** Disputes: the hospital must react before the provider's deadline, so every step is a webhook. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int onDisputeEvent(EventMessage event, DisputeEventPayload d) {
+        String type = DISPUTE_TYPES.get(event.eventType());
+        if (type == null) {
+            return 0;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("disputeId", d.disputeId());
+        data.put("paymentId", d.paymentId());
+        data.put("providerDisputeId", d.providerDisputeId());
+        data.put("status", d.status());
+        data.put("amount", d.amount());
+        putIfPresent(data, "moneyMoved", d.moneyMoved());
+        putIfPresent(data, "reasonCode", d.reasonCode());
+        putIfPresent(data, "phase", d.phase());
+        putIfPresent(data, "respondBy", d.respondBy());
+        return save(webhook(event, type, d.merchantId(), d.paymentId(), null, data));
     }
 
     private Notification webhook(EventMessage event, String type, UUID merchantId, UUID paymentId, UUID refundId,

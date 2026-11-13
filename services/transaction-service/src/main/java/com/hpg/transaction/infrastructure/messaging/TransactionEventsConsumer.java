@@ -3,6 +3,7 @@ package com.hpg.transaction.infrastructure.messaging;
 import com.hpg.events.Topics;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
+import com.hpg.events.dispute.DisputeEventPayload;
 import com.hpg.events.reconciliation.SettlementConfirmedPayload;
 import com.hpg.messaging.consumer.EventMessage;
 import com.hpg.messaging.consumer.EventParser;
@@ -27,6 +28,7 @@ public class TransactionEventsConsumer {
     public static final String PAYMENTS_GROUP = "transaction-payments";
     public static final String REFUNDS_GROUP = "transaction-refunds";
     public static final String SETTLEMENTS_GROUP = "transaction-settlements";
+    public static final String DISPUTES_GROUP = "transaction-disputes";
 
     private final EventParser parser;
     private final ProcessedEvents processed;
@@ -75,6 +77,18 @@ public class TransactionEventsConsumer {
         tx.executeWithoutResult(s -> {
             if (processed.markProcessed(SETTLEMENTS_GROUP, event.eventId())) {
                 recorder.onSettlementConfirmed(event, payload);
+            }
+        });
+    }
+
+    /** Disputes: chargebacks and their reversals in the ledger, and the payment's timeline. */
+    @KafkaListener(id = DISPUTES_GROUP, topics = Topics.DISPUTE_EVENTS, groupId = DISPUTES_GROUP)
+    public void onDisputeEvent(String value) {
+        EventMessage event = parser.parse(value);
+        DisputeEventPayload payload = event.payloadAs(DisputeEventPayload.class);
+        tx.executeWithoutResult(s -> {
+            if (processed.markProcessed(DISPUTES_GROUP, event.eventId())) {
+                recorder.onDisputeEvent(event, payload);
             }
         });
     }

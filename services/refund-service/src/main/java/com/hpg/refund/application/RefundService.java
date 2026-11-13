@@ -9,6 +9,7 @@ import com.hpg.refund.domain.RefundErrorCode;
 import com.hpg.refund.domain.RefundablePayment;
 import com.hpg.refund.infrastructure.persistence.MerchantReplicaStore;
 import com.hpg.refund.infrastructure.persistence.RefundRepository;
+import com.hpg.refund.infrastructure.persistence.OpenDisputeStore;
 import com.hpg.refund.infrastructure.persistence.RefundablePaymentStore;
 import com.hpg.refund.provider.RefundProvider;
 import org.slf4j.MDC;
@@ -44,11 +45,13 @@ public class RefundService {
     private final RefundProperties properties;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final OpenDisputeStore disputes;
 
     public RefundService(RefundablePaymentStore refundables, MerchantReplicaStore merchants, RefundRepository refunds,
             RefundTransitions transitions,
             IdempotencyService idempotency, RefundProcessor processor, RefundProvider provider,
-            RefundProperties properties, PlatformTransactionManager txManager, Clock clock) {
+            RefundProperties properties, PlatformTransactionManager txManager, Clock clock, OpenDisputeStore disputes) {
+        this.disputes = disputes;
         this.refundables = refundables;
         this.merchants = merchants;
         this.refunds = refunds;
@@ -89,6 +92,10 @@ public class RefundService {
                         "Payment " + c.paymentId() + " is not refundable yet. Refund only payments you have seen "
                                 + "as CAPTURED; if it was just captured, retry in a few seconds.",
                         Map.of("retryAfterSeconds", 2)));
+        if (disputes.isDisputed(c.paymentId())) {
+            throw new BusinessException(RefundErrorCode.PAYMENT_DISPUTED, "Payment " + c.paymentId() + " is under an "
+                    + "open dispute. A refund now could pay the patient twice; wait for the dispute's outcome.");
+        }
         if (!payment.currency().equals(c.amount().currency())) {
             throw new BusinessException(RefundErrorCode.CURRENCY_MISMATCH, "The payment was made in "
                     + payment.currency() + "; refunds must use the same currency.");

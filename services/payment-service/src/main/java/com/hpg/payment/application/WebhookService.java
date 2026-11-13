@@ -44,10 +44,12 @@ public class WebhookService {
     private final TransactionTemplate tx;
     private final MeterRegistry meters;
     private final Clock clock;
+    private final DisputeService disputes;
 
     public WebhookService(PaymentProviders providers, WebhookInbox inbox, PaymentEvidenceService evidence,
             PaymentLookup lookup, PaymentProperties properties, TransactionTemplate tx, MeterRegistry meters,
-            Clock clock) {
+            Clock clock, DisputeService disputes) {
+        this.disputes = disputes;
         this.providers = providers;
         this.inbox = inbox;
         this.evidence = evidence;
@@ -106,6 +108,13 @@ public class WebhookService {
         if (event.createdAt() != null && event.createdAt().isBefore(now.minus(properties.webhookMaxAge()))) {
             // Replay protection: old events are acknowledged (so they are not redelivered) but not applied.
             return Outcome.TOO_OLD;
+        }
+        if (event.isDispute()) {
+            return switch (disputes.onProviderDispute(provider.name(), event.dispute(), event.eventId())) {
+                case APPLIED -> Outcome.APPLIED;
+                case NO_CHANGE -> Outcome.NO_CHANGE;
+                case UNKNOWN_PAYMENT -> Outcome.UNKNOWN_ORDER;
+            };
         }
         Optional<PaymentOrder> order = evidence.orderFor(provider.name(), event.payment());
         if (order.isEmpty()) {

@@ -87,4 +87,18 @@ public final class RazorpayStub {
     public static String checkoutSignature(String orderId, String paymentId) {
         return HmacSignatures.hmacSha256Hex(KEY_SECRET, (orderId + "|" + paymentId).getBytes(StandardCharsets.UTF_8));
     }
+
+    public static String dispute(String id, String paymentId, long paise, long deductedPaise, String status, long respondBy) {
+        return """
+                {"id":"%s","entity":"dispute","payment_id":"%s","amount":%d,"currency":"INR","amount_deducted":%d,
+                 "reason_code":"chargeback_product_not_received","respond_by":%d,"status":"%s","phase":"chargeback",
+                 "created_at":%d}""".formatted(id, paymentId, paise, deductedPaise, respondBy, status, respondBy - 7 * 86_400);
+    }
+
+    public static String disputeWebhook(String event, String paymentJson, String disputeJson, long createdAtEpochSeconds) {
+        return """
+                {"entity":"event","account_id":"acc_test","event":"%s","contains":["payment","dispute"],
+                 "payload":{"payment":{"entity":%s},"dispute":{"entity":%s}},"created_at":%d}"""
+                .formatted(event, paymentJson, disputeJson, createdAtEpochSeconds);
+    }
 }

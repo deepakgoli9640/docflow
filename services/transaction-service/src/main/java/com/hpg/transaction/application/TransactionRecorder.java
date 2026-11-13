@@ -7,6 +7,7 @@ import com.hpg.events.ledger.TransactionCreatedPayload;
 import com.hpg.messaging.outbox.OutboxWriter;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
+import com.hpg.events.dispute.DisputeEventPayload;
 import com.hpg.events.reconciliation.SettlementConfirmedPayload;
 import com.hpg.messaging.consumer.EventMessage;
 import com.hpg.messaging.consumer.PrerequisiteNotMetException;
@@ -136,6 +137,36 @@ public class TransactionRecorder {
             meters.counter("ledger.postings", "type", "SETTLEMENT").increment();
             log.info("Settlement booked for {} (settlement {}): gross {}, fees {}", s.transactionRef(),
                     s.settlementId(), s.gross(), s.fee().plus(s.tax()));
+        }
+    }
+
+    /**
+     * Dispute money movements: a deduction books a chargeback against the payment, a won dispute reverses it.
+     * Other dispute events only extend the payment's timeline.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onDisputeEvent(EventMessage event, DisputeEventPayload d) {
+        Transaction payment = transactions.findByPaymentIdAndType(d.paymentId(), TransactionType.PAYMENT)
+                .filter(t -> ledger.hasPosting(t.getId(), PostingRules.PostingType.CAPTURE))
+                .orElseThrow(() -> new PrerequisiteNotMetException("Capture of payment " + d.paymentId()
+                        + " not booked yet; " + event.eventType() + " " + event.eventId() + " will be retried"));
+        Instant now = clock.instant();
+        timeline.record(payment.getId(), event.eventId(), event.eventType(), "DISPUTE_" + d.status(),
+                payment.getSourceVersion(), occurredAt(event), now);
+        PostingRules.PostingType type = switch (event.eventType()) {
+            case "DisputeFundsDeducted" -> PostingRules.PostingType.CHARGEBACK;
+            case "DisputeFundsReinstated" -> PostingRules.PostingType.CHARGEBACK_REVERSAL;
+            default -> null;
+        };
+        if (type == null || d.moneyMoved() == null || !d.moneyMoved().isPositive()) {
+            return;
+        }
+        var entries = type == PostingRules.PostingType.CHARGEBACK
+                ? PostingRules.chargeback(d.merchantId(), d.moneyMoved())
+                : PostingRules.chargebackReversal(d.merchantId(), d.moneyMoved());
+        if (ledger.post(event.eventId(), payment.getId(), type, entries, now)) {
+            meters.counter("ledger.postings", "type", type.name()).increment();
+            log.info("{} of {} booked for payment {} (dispute {})", type, d.moneyMoved(), d.paymentId(), d.providerDisputeId());
         }
     }
 

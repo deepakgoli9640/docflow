@@ -84,7 +84,7 @@ spring:
             - id: payment-api
               uri: ${HPG_PAYMENT_SERVICE_URI:http://localhost:8082}
               predicates:
-                - Path=/api/v1/payments,/api/v1/payments/**
+                - Path=/api/v1/payments,/api/v1/payments/**,/api/v1/disputes,/api/v1/disputes/**
               filters:
                 - name: RequestSize
                   args:
