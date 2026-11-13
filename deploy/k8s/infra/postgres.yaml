@@ -45,6 +45,7 @@ spec:
       - { name: transaction_app,  ensure: present, login: true, passwordSecret: { name: hpg-db-transaction } }
       - { name: notification_app, ensure: present, login: true, passwordSecret: { name: hpg-db-notification } }
       - { name: recon_app,        ensure: present, login: true, passwordSecret: { name: hpg-db-recon } }
+      - { name: keycloak_app,     ensure: present, login: true, passwordSecret: { name: hpg-db-keycloak } }
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -75,3 +76,9 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata: { name: hpg-recon-db }
 spec: { cluster: { name: hpg-postgres }, name: recon_db, owner: recon_app }
+---
+# Keycloak's own database (dashboard single sign-on, deploy/k8s/infra/keycloak.yaml)
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-keycloak-db }
+spec: { cluster: { name: hpg-postgres }, name: keycloak_db, owner: keycloak_app }

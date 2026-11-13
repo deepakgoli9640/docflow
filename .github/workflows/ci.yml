@@ -96,7 +96,8 @@ jobs:
           done
           "$(go env GOPATH)/bin/kubeconform" -strict -summary -kubernetes-version 1.30.0 deploy/k8s/demo-infra.yaml
           "$(go env GOPATH)/bin/kubeconform" -summary -kubernetes-version 1.30.0 \
-            -schema-location default -schema-location "$CRDS" deploy/k8s/infra/postgres.yaml deploy/k8s/infra/kafka.yaml
+            -schema-location default -schema-location "$CRDS" deploy/k8s/infra/postgres.yaml deploy/k8s/infra/kafka.yaml \
+            deploy/k8s/infra/keycloak.yaml deploy/k8s/infra/external-secrets.yaml
 
   images:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'

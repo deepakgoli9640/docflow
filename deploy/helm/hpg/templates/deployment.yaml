@@ -104,6 +104,15 @@ spec:
           env:
             - name: GATEWAY_URL
               value: {{ printf "http://%s:%v" (include "hpg.component" (dict "root" $root "name" "api-gateway")) (index $root.Values.services "api-gateway").port | quote }}
+            # Single sign-on: the dashboard proxies /auth/ to the identity provider (same origin, strict CSP).
+            - name: OIDC_AUTHORITY
+              value: {{ ternary "/auth/realms/hpg" "" $root.Values.oidc.enabled | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ $root.Values.oidc.dashboardClientId | quote }}
+            - name: OIDC_UPSTREAM
+              value: {{ $root.Values.oidc.dashboardUpstream | quote }}
+            - name: NGINX_RESOLVER
+              value: kube-dns.kube-system.svc.cluster.local
           {{- end }}
           {{- if $java }}
           # Boot's probe groups: liveness = the JVM is not stuck; readiness = ready for traffic (false while

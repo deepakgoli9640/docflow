@@ -25,6 +25,8 @@ ingress:
   dashboardHost: app.hpg.localtest.me
 networkPolicy:
   enabled: false
+oidc:
+  enabled: false
 defaults:
   replicas: 1
   autoscaling:

@@ -35,6 +35,7 @@ startup and less memory — fine locally, not for load tests or production.)
 | `notify` | notification-service, mailpit |
 | `recon` | reconciliation-service (local: settlement window 0 days, so missing items show at once) |
 | `obs` | prometheus, grafana, jaeger |
+| `auth` | keycloak: single sign-on for dashboard users at http://localhost:8090/auth (~500 MB) |
 | `tools` | kafka-ui (optional, ~250 MB) |
 
 ```bash

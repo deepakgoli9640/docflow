@@ -27,11 +27,25 @@ public record SecurityProperties(
 
     public SecurityProperties {
         staticClients = staticClients == null ? List.of() : List.copyOf(staticClients);
-        jwt = jwt == null ? new Jwt(null, null) : jwt;
+        jwt = jwt == null ? new Jwt(null, null, null, false) : jwt;
     }
 
-    /** PEM files: PKCS#8 private key and X.509 SubjectPublicKeyInfo public key. */
-    public record Jwt(Resource privateKeyLocation, Resource publicKeyLocation) {
+    /**
+     * Token signing keys, as PEM files (PKCS#8 private key, X.509 SubjectPublicKeyInfo public keys).
+     *
+     * @param privateKeyLocation         the active signing key
+     * @param publicKeyLocation          its public key
+     * @param previousPublicKeyLocations public keys of retired signing keys, still published in the JWKS so
+     *                                   tokens signed before a rotation stay valid until they expire
+     * @param requireConfiguredKey       refuse to start without configured keys (production); otherwise an
+     *                                   ephemeral key is generated (local development only)
+     */
+    public record Jwt(Resource privateKeyLocation, Resource publicKeyLocation, List<Resource> previousPublicKeyLocations,
+            boolean requireConfiguredKey) {
+
+        public Jwt {
+            previousPublicKeyLocations = previousPublicKeyLocations == null ? List.of() : List.copyOf(previousPublicKeyLocations);
+        }
     }
 
     public record StaticClient(String clientId, String clientSecret, List<String> roles) {

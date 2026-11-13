@@ -61,6 +61,10 @@ hpg:
   security:
     jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
     issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    oidc:                       # dashboard single sign-on (Keycloak); off when HPG_OIDC_ISSUER is empty
+      issuer: ${HPG_OIDC_ISSUER:}
+      jwk-set-uri: ${HPG_OIDC_JWK_SET_URI:}
+      audience: ${HPG_OIDC_AUDIENCE:hpg-api}
     encryption-key: ${HPG_ENCRYPTION_KEY:}
   notification:
     merchant-service-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}

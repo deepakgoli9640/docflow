@@ -33,6 +33,16 @@ tracing:
   endpoint: http://otel-collector.monitoring:4318/v1/traces
   sampling: "0.1"
 
+# Single sign-on for dashboard users (deploy/k8s/infra/keycloak.yaml). The services trust this issuer next to
+# merchant-service, for people only (roles MERCHANT with a hospital, or OPS; never SERVICE).
+oidc:
+  enabled: true
+  issuer: https://app.hpg.example/auth/realms/hpg             # exactly the iss of its tokens
+  jwkSetUri: http://hpg-keycloak-service:8080/auth/realms/hpg/protocol/openid-connect/certs
+  audience: hpg-api
+  dashboardUpstream: http://hpg-keycloak-service:8080         # the dashboard proxies /auth/ here
+  dashboardClientId: hpg-dashboard
+
 paymentProvider: razorpay               # "simulated" only for demos
 checkoutBaseUrl: https://api.hpg.example/checkout
 emailFrom: payments@hpg.example
@@ -57,6 +67,9 @@ ingress:
   className: nginx
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"     # HTTP only redirects to HTTPS
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
     nginx.ingress.kubernetes.io/proxy-body-size: 21m      # settlement uploads; the gateway enforces per-route limits
   tls: true
   apiHost: api.hpg.example

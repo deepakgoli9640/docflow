@@ -83,9 +83,18 @@ if curl -s -o /dev/null -f -H "Authorization: Bearer $OPS" "$GW/api/v1/reconcili
   await_batch "$(jq -r .id <<<"$BATCH")" | jq -c '{businessDate, status, matched, mismatched, missingInProvider, missingInInternalSystem, duplicate}'
 fi
 
+# Single sign-on users when Keycloak runs (profile "auth"); names are made unique per run.
+SSO=""
+if curl -s -o /dev/null -f "http://localhost:8090/auth/realms/hpg/.well-known/openid-configuration"; then
+  suffix=$RANDOM
+  SSO=$(printf '  Single sign-on     %s\n                     %s\n' \
+    "$(./scripts/keycloak-users.sh hospital "staff$suffix" "$MID")" "$(./scripts/keycloak-users.sh ops "ops$suffix")")
+fi
+
 cat <<INFO
 
 Demo data ready. Open http://localhost:8090
+$SSO
 
   Hospital sign-in   API key ID: $KEY_ID
                      Secret:     $KEY_SECRET

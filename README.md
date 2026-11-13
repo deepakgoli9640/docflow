@@ -81,6 +81,7 @@ docs/                        Architecture documentation
 docker compose -f deploy/docker-compose.yml --profile infra --profile core \
   --profile refund --profile transactions --profile notify --profile recon --profile dashboard up -d --build
 #     add `--profile obs` (and HPG_TRACE_EXPORT=true) for Prometheus, Grafana and Jaeger (~170 MB more)
+#     add `--profile auth` for single sign-on (Keycloak); seed-demo-data.sh then also creates SSO users
 ./scripts/seed-demo-data.sh       # optional: demo data + sign-in details for the dashboard
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
@@ -111,6 +112,7 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | http://localhost:8085/swagger-ui.html | notification-service OpenAPI / Swagger UI |
 | http://localhost:8086/swagger-ui.html | reconciliation-service OpenAPI / Swagger UI |
 | http://localhost:8025 | Mailpit: every email the system sends locally |
+| http://localhost:8090/auth/admin | Keycloak admin console (`auth` profile; user `admin`, password `KC_BOOTSTRAP_ADMIN_PASSWORD` in deploy/env/.env) |
 | http://localhost:3000 | Grafana (`obs` profile): payments, provider, event pipeline, recon & ledger dashboards |
 | http://localhost:9090 | Prometheus (`obs` profile): targets and alert rules |
 | http://localhost:16686 | Jaeger (`obs` profile, `HPG_TRACE_EXPORT=true`): traces across gateway, services and Kafka |

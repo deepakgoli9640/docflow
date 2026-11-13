@@ -109,18 +109,32 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JWKSource<SecurityContext> jwkSource(SecurityProperties properties) {
-        RSAKey key = SigningKeyProvider.load(properties.jwt());
-        return new ImmutableJWKSet<>(new JWKSet(key));
+    public SigningKeys signingKeys(SecurityProperties properties) {
+        return new SigningKeys(SigningKeyProvider.load(properties.jwt()), SigningKeyProvider.previous(properties.jwt()));
+    }
+
+    /** The JWKS: the active key plus retired public keys (rotation). Tokens name their key in the header (kid). */
+    @Bean
+    public JWKSource<SecurityContext> jwkSource(SigningKeys keys) {
+        List<com.nimbusds.jose.jwk.JWK> all = new java.util.ArrayList<>();
+        all.add(keys.active());
+        all.addAll(keys.previous());
+        return new ImmutableJWKSet<>(new JWKSet(all));
+    }
+
+    /** Active signing key and retired public keys. */
+    public record SigningKeys(RSAKey active, List<RSAKey> previous) {
     }
 
     /** This service validates its own tokens locally (no HTTP call to itself), including the issuer. */
     @Bean
-    public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource, SecurityProperties properties) {
+    public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource, SecurityProperties properties,
+            com.hpg.web.security.ExternalIssuerProperties identityProvider) {
         NimbusJwtDecoder decoder = (NimbusJwtDecoder) org.springframework.security.oauth2.server.authorization
                 .config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
-        return decoder;
+        // People signed in through the identity provider (dashboard SSO) use the same APIs as API-key clients.
+        return com.hpg.web.security.HpgJwtDecoders.withExternalIssuer(decoder, properties.issuer(), identityProvider);
     }
 
     @Bean
@@ -130,8 +144,10 @@ public class SecurityConfig {
 
     /** Adds {@code roles} and, for merchant keys, {@code mid} to access tokens. */
     @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer(ApiKeyService apiKeys) {
+    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer(ApiKeyService apiKeys, SigningKeys keys) {
         return context -> {
+            // Sign with the active key only; the JWKS may also hold retired public keys.
+            context.getJwsHeader().keyId(keys.active().getKeyID());
             if (!OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())
                     || !AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
                 return;

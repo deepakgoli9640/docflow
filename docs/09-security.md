@@ -55,13 +55,35 @@ Mitigation: merchant-service publishes the snapshot event; the gateway puts the 
 **Redis deny-list** and rejects its tokens immediately. Key rotation: merchants can hold two active
 keys at once to rotate without downtime.
 
-### 2.2 Ops users
+### 2.2 People: dashboard single sign-on (OIDC)
 
-Locally: an `ops-console` OAuth client whose secret comes from `HPG_OPS_CLIENT_SECRET` gets
-`roles: [OPS]` (an empty secret disables the client — there are no default credentials).
-Production recommendation: human users sign in through the company IdP (OIDC — Okta/Azure AD/
-Keycloak) with MFA; services trust that issuer as well. Not built locally because running Keycloak
-costs ~500 MB+ RAM.
+Hospital staff and operations sign in to the dashboard through an identity provider. Keycloak is
+included (Compose profile `auth`; Keycloak Operator on Kubernetes); any OpenID Connect provider works.
+
+- **Flow:** Authorization Code with PKCE (`js/oidc.js`): the browser holds no client secret.
+  - The provider runs the login: password policy (12+ characters, history), brute-force lockout, optional
+    TOTP.
+  - The access token lives 5 minutes. It is kept in sessionStorage; the refresh token is kept in memory
+    only.
+  - Signing out also ends the provider's session.
+- **Claims:**
+  - `roles`: `MERCHANT` or `OPS`. Only these realm roles are in the dashboard client's scope.
+  - `mid`: the user's hospital. It is an admin-only user attribute and must be a UUID.
+  - `aud` must contain `hpg-api`.
+- **Trust:** the gateway and every service accept two issuers, merchant-service and the identity
+  provider. The issuer is read from the token only to pick the right key set; the chosen decoder then
+  verifies the signature, issuer, expiry and audience. Identity-provider tokens may grant people's roles
+  only:
+  - `SERVICE` is rejected;
+  - a `MERCHANT` token without a valid `mid` is rejected;
+  - roles the provider adds itself (e.g. `offline_access`) are ignored.
+
+  Tests: `HpgJwtDecodersTest`, `IssuerDispatchingReactiveJwtDecoderTest`, plus a browser run of both kinds
+  of user.
+- **Same origin:** the dashboard's nginx serves the provider under `/auth/`, so the login needs no CORS and
+  the dashboard keeps `connect-src 'self'`.
+- **Fallback:** client-credentials sign-in, with an API key or the `ops-console` client, still works. It
+  is meant for automation and break-glass access.
 
 ### 2.3 Service-to-service
 
@@ -122,7 +144,7 @@ Spring Cloud Gateway `RequestRateLimiter` with Redis token bucket:
 | Secret / data | Storage |
 |---|---|
 | Razorpay key secret, webhook secret | Environment variables locally (`.env`, git-ignored, `.env.example` committed); a secrets manager (Vault / AWS Secrets Manager) in production |
-| JWT signing key | Generated RSA key pair loaded from a keystore path in env; rotated with `kid` |
+| JWT signing key | RSA key pair from PEM files mounted from a Secret; required in production (`require-configured-key`), so every replica signs with the same key; rotated with `kid` (below) |
 | DB passwords | Env vars; one user per service |
 | Merchant API secrets | bcrypt hash only |
 | Merchant webhook secrets | AES-256-GCM encrypted at rest (key from env / KMS) |
@@ -130,6 +152,27 @@ Spring Cloud Gateway `RequestRateLimiter` with Redis token bucket:
 | Card number, CVV, UPI PIN | **Never received.** Hosted checkout. |
 
 No credentials are hardcoded or committed. CI runs a secret scanner (gitleaks) on every push.
+
+**Kubernetes:** secrets never appear in Helm values. External Secrets Operator copies them from the
+secret manager into Kubernetes Secrets (`deploy/k8s/infra/external-secrets.yaml`), and each service
+receives only the keys it uses (D69). A rotated database password or API key reaches the pods on a
+rolling restart.
+
+### Signing-key rotation (no downtime)
+
+1. Generate a new key pair:
+   `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem`, then
+   `openssl pkey -in private.pem -pubout -out public.pem`.
+2. Deploy merchant-service with the new pair as the active key and the old public key in
+   `HPG_JWT_PREVIOUS_PUBLIC_KEY_LOCATIONS`.
+   - The JWKS now publishes both keys.
+   - New tokens carry the new `kid`.
+   - Tokens signed with the old key stay valid until they expire.
+   - Resource servers fetch the JWKS again when they see an unknown `kid`.
+3. After the token lifetime (15 minutes) plus the JWKS cache (5 minutes), remove the old public key.
+
+`KeyRotationIT` checks both: the JWKS publishes both keys, and a token signed by the retired key is still
+accepted.
 
 ## 7. Logging hygiene
 
@@ -143,10 +186,13 @@ No credentials are hardcoded or committed. CI runs a secret scanner (gitleaks) o
 
 ## 8. TLS
 
-- Locally: plain HTTP inside Docker; optional self-signed TLS on the gateway via a Spring Boot SSL
-  bundle for practice.
-- Production: TLS 1.2+ (prefer 1.3) at the load balancer, HSTS, modern cipher suites; TLS or mTLS
-  for internal traffic, Postgres (`sslmode=verify-full`) and Kafka (SASL_SSL).
+| Hop | Locally (Compose) | Production (Helm chart) |
+|---|---|---|
+| Browser / hospital → edge | HTTP on localhost | TLS 1.2+ at the ingress, certificate from cert-manager. HTTP is redirected to HTTPS, and HSTS is sent (one year, subdomains). |
+| Provider webhooks → edge | — | Same ingress, TLS |
+| Services → PostgreSQL | `sslmode=prefer` | `sslmode=require` (CloudNativePG serves TLS by default); `verify-full` once the CA is mounted |
+| Services → Kafka | plaintext | in-cluster plaintext listener limited by NetworkPolicies; a TLS listener (9093) is available for mTLS |
+| Service → service | plaintext in the Docker network | NetworkPolicies allow only the designed paths; mTLS through a service mesh is the next step |
 
 ## 9. PCI DSS considerations (not a compliance claim)
 

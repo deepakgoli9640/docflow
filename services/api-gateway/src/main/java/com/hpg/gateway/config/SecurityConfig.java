@@ -17,6 +17,8 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+
+import java.util.Map;
 import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
 import org.springframework.security.web.server.authorization.ServerAccessDeniedHandler;
 
@@ -73,10 +75,16 @@ public class SecurityConfig {
      * {@code kid} appears, which is how key rotation works), expiry and issuer.
      */
     @Bean
-    public ReactiveJwtDecoder reactiveJwtDecoder(GatewayProperties properties) {
+    public ReactiveJwtDecoder reactiveJwtDecoder(GatewayProperties properties, IdentityProviderProperties idp) {
         NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder.withJwkSetUri(properties.jwkSetUri()).build();
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
-        return decoder;
+        if (!idp.enabled()) {
+            return decoder;
+        }
+        // People signed in to the dashboard through the identity provider (single sign-on).
+        NimbusReactiveJwtDecoder people = NimbusReactiveJwtDecoder.withJwkSetUri(idp.jwkSetUri()).build();
+        people.setJwtValidator(IssuerDispatchingReactiveJwtDecoder.externalValidator(idp));
+        return new IssuerDispatchingReactiveJwtDecoder(Map.of(properties.issuer(), decoder, idp.issuer(), people));
     }
 
     private static ReactiveJwtAuthenticationConverterAdapter jwtAuthenticationConverter() {

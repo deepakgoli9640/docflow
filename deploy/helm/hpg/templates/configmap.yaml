@@ -18,6 +18,11 @@ data:
   HPG_TRACE_EXPORT: {{ .Values.tracing.export | quote }}
   HPG_TRACE_SAMPLING: {{ .Values.tracing.sampling | quote }}
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {{ .Values.tracing.endpoint | quote }}
+  {{- if .Values.oidc.enabled }}
+  HPG_OIDC_ISSUER: {{ .Values.oidc.issuer | quote }}
+  HPG_OIDC_JWK_SET_URI: {{ .Values.oidc.jwkSetUri | quote }}
+  HPG_OIDC_AUDIENCE: {{ .Values.oidc.audience | quote }}
+  {{- end }}
   HPG_PAYMENT_PROVIDER: {{ .Values.paymentProvider | quote }}
   HPG_CHECKOUT_BASE_URL: {{ .Values.checkoutBaseUrl | quote }}
   HPG_ALLOW_INSECURE_WEBHOOKS: "false"

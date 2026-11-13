@@ -98,3 +98,7 @@ designed but not built.
 | Kubernetes: Helm chart (replicas, HPA, PDB, probes, rolling updates, NetworkPolicies, ingress + TLS, least-privilege secrets), CloudNativePG / Strimzi / Redis manifests | **Real, validated statically** | Schema-validated in CI; every image run with the chart's security settings; **not yet installed on a live cluster** ([deploy/k8s](../deploy/k8s/README.md)) |
 | High availability: two replicas of every service pass the end-to-end smoke tests, no duplicates | **Real** | `scripts/ha-check.sh` (Compose with 2 replicas each) |
 | Alertmanager routing | **Not yet** | |
+| Dashboard single sign-on (OIDC Authorization Code + PKCE) with Keycloak: password policy, lockout, optional TOTP; services and gateway trust it for MERCHANT/OPS only | **Real** | Compose profile `auth`; browser-tested for both kinds of user; Keycloak Operator manifest for Kubernetes |
+| Token signing-key rotation (active + retired public keys in the JWKS), production refuses ephemeral keys | **Real** | `KeyRotationIT` |
+| Secrets from a secret manager (External Secrets), TLS at the ingress with HSTS, Postgres TLS | **Real, validated statically** | Kubernetes manifests; not run on a live cluster |
+| Service-to-service mTLS (service mesh), penetration test | **Not yet** | |

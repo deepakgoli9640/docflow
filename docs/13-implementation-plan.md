@@ -221,6 +221,24 @@ Four parts, in order: Kubernetes + HA, production security, business features, a
   - two replicas of every service passing the smoke tests with no duplicates (`scripts/ha-check.sh`).
 - Not verified: an install on a live cluster (kind cannot run in the build environment).
 
+### 9b — Production security ✅ done
+- **Single sign-on** for dashboard users with Keycloak (OIDC Authorization Code + PKCE):
+  - realm as code (`deploy/keycloak/hpg-realm.json`) with password policy, brute-force lockout and optional
+    TOTP;
+  - the `mid` user attribute and an `hpg-api` audience;
+  - a Compose profile `auth`, user provisioning (`scripts/keycloak-users.sh`) and a Keycloak Operator manifest.
+- **The gateway and all six services trust two issuers.** Identity-provider tokens may only grant people's
+  roles (never SERVICE; MERCHANT needs a hospital).
+- Browser-tested: an operations user and a hospital user signed in through Keycloak, with the right view,
+  tenant isolation and a full sign-out.
+- **Signing-key rotation:** the JWKS publishes the active key and retired public keys; tokens name their
+  `kid`; production refuses to start without a configured key.
+- **Secrets and TLS:**
+  - External Secrets manifest (secret manager → Kubernetes Secrets);
+  - HTTPS-only ingress with HSTS, Postgres TLS;
+  - a TLS map per hop in [09 §8](09-security.md).
+- Not done: service-mesh mTLS between services, a penetration test.
+
 ## Testing approach used throughout
 
 | Level | Tools | Notes |

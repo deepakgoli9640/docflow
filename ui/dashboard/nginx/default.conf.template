@@ -32,6 +32,30 @@ server {
         add_header X-Content-Type-Options nosniff always;
     }
 
+    # Single sign-on settings for the browser (js/oidc.js). The app hides SSO if the provider is unreachable.
+    location = /config.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options nosniff always;
+        return 200 '{"oidc":{"authority":"${OIDC_AUTHORITY}","clientId":"${OIDC_CLIENT_ID}"}}';
+    }
+
+    # The identity provider (Keycloak) under the same origin, so login, token and logout need no CORS and the
+    # dashboard's CSP can stay connect-src 'self'. Resolved per request, so the dashboard still starts when
+    # no identity provider is deployed (the SSO button is then hidden). Keycloak sends its own CSP.
+    location /auth/ {
+        resolver ${NGINX_RESOLVER} valid=30s ipv6=off;
+        set $idp ${OIDC_UPSTREAM};
+        proxy_pass $idp;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_buffer_size 16k;    # Keycloak's login responses carry large cookies/headers
+        proxy_buffers 8 16k;
+        add_header X-Content-Type-Options nosniff always;
+    }
+
     location ~ ^/(api|oauth2)/ {
         proxy_pass ${GATEWAY_URL};
         proxy_set_header Host $host;
