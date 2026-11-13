@@ -5,7 +5,7 @@ One web app for two audiences, behind the API gateway:
 | Sign in as | With | Sees |
 |---|---|---|
 | **Hospital** | an API key (key ID + secret) | Overview (collected / refunded / net, items needing attention), payments (create, capture, cancel, copy the patient link), refunds, transaction history with ledger entries, notification delivery, settings (webhook URL and secret, payment configuration, API keys) |
-| **Operations** | the `ops-console` client (`HPG_OPS_CLIENT_SECRET`) | Overview, hospitals (activate / suspend / deactivate, sync configuration to payment processing, amount owed), failed notifications across hospitals (re-send), ledger integrity and account balances |
+| **Operations** | the `ops-console` client (`HPG_OPS_CLIENT_SECRET`) | Overview, hospitals (activate / suspend / deactivate, configuration, amount owed), failed notifications across hospitals (re-send), ledger integrity and account balances |
 
 ## Run it
 

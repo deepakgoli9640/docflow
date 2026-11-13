@@ -31,12 +31,8 @@ OPS=$(curl -s -u "ops-console:$OPS_SECRET" -d grant_type=client_credentials "$GW
 curl -s -o /dev/null -X POST -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' \
   -d '{"reason":"KYC verified"}' "$GW/api/v1/admin/merchants/$MID/activate"
 TOKEN=$(curl -s -u "$KEY_ID:$KEY_SECRET" -d grant_type=client_credentials "$GW/oauth2/token" | jq -r .access_token)
-expect 200 "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$GW/api/v1/admin/merchant-config-replicas/$MID" \
-  -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' -d '{"displayName":"City Hospital",
-  "status":"ACTIVE","enabledMethods":["UPI","CARD"],"captureMode":"AUTO",
-  "minAmount":{"amount":"1.00","currency":"INR"},"maxAmountPerTransaction":{"amount":"200000.00","currency":"INR"},
-  "dailyLimit":{"amount":"1000000.00","currency":"INR"},"paymentTtlMinutes":60,"maxAttempts":3}')" \
-  "seed merchant replica in payment-service (temporary endpoint)"
+source scripts/lib/merchant.sh
+wait_until_payable AUTO && echo "ok: merchant settings replicated to payment-service via merchant.snapshots.v1"
 AUTH=(-H "Authorization: Bearer $TOKEN")
 
 step "1. Payment Service: hospital creates a payment, patient pays (SIMULATED provider)"
@@ -85,5 +81,18 @@ REG2=$(curl -s -X POST "$GW/api/v1/merchants" -H 'Content-Type: application/json
 T2=$(curl -s -u "$(jq -r .apiKey.keyId <<<"$REG2"):$(jq -r .apiKey.keySecret <<<"$REG2")" -d grant_type=client_credentials "$GW/oauth2/token" | jq -r .access_token)
 expect 404 "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T2" "$GW/api/v1/refunds/$RID")" "cross-tenant refund read"
 expect 404 "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $T2" "$GW/api/v1/transactions/$REF")" "cross-tenant transaction read"
+
+step "6. Suspension: the hospital's existing token is refused at the gateway within seconds (merchant.snapshots.v1)"
+status_change() { curl -s -o /dev/null -X POST -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' \
+  -d "{\"reason\":\"$2\"}" "$GW/api/v1/admin/merchants/$MID/$1"; }
+code_with_old_token() { curl -s -o /dev/null -w '%{http_code}' "${AUTH[@]}" "$GW/api/v1/payments?size=1"; }
+status_change suspend "Smoke test: suspension"
+refused() { [[ "$(code_with_old_token)" == 403 ]]; }
+eventually 30 "token issued before the suspension is refused (403 MERCHANT_SUSPENDED)" refused
+expect MERCHANT_SUSPENDED "$(curl -s "${AUTH[@]}" "$GW/api/v1/payments?size=1" | jq -r .errorCode)" "error code"
+expect 401 "$(curl -s -o /dev/null -w '%{http_code}' -u "$KEY_ID:$KEY_SECRET" -d grant_type=client_credentials "$GW/oauth2/token")" "no new token while suspended"
+status_change activate "Smoke test: reactivation"
+accepted() { [[ "$(code_with_old_token)" == 200 ]]; }
+eventually 30 "the same token works again after reactivation" accepted
 
 printf '\n\033[32mPhase 4 smoke test passed: payment -> Kafka -> refund, transactions, notifications.\033[0m\n'

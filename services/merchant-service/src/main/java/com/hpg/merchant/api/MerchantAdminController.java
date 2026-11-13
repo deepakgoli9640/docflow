@@ -2,6 +2,7 @@ package com.hpg.merchant.api;
 
 import com.hpg.merchant.api.dto.ConfigurationResponse;
 import com.hpg.merchant.application.MerchantConfigurationService;
+import com.hpg.merchant.application.MerchantSnapshotBackfill;
 
 import com.hpg.merchant.api.dto.MerchantResponse;
 import com.hpg.merchant.api.dto.StatusChangeRequest;
@@ -35,10 +36,20 @@ public class MerchantAdminController {
 
     private final MerchantOnboardingService onboarding;
     private final MerchantConfigurationService configurations;
+    private final MerchantSnapshotBackfill snapshots;
 
-    public MerchantAdminController(MerchantOnboardingService onboarding, MerchantConfigurationService configurations) {
+    public MerchantAdminController(MerchantOnboardingService onboarding, MerchantConfigurationService configurations,
+            MerchantSnapshotBackfill snapshots) {
         this.onboarding = onboarding;
         this.configurations = configurations;
+        this.snapshots = snapshots;
+    }
+
+    @PostMapping("/snapshots/republish")
+    @Operation(summary = "Republish every merchant's snapshot",
+            description = "Rebuilds the merchant copies in payment-service, refund-service and the gateway. Safe to repeat.")
+    public java.util.Map<String, Integer> republishSnapshots() {
+        return java.util.Map.of("published", snapshots.republishAll());
     }
 
     @GetMapping

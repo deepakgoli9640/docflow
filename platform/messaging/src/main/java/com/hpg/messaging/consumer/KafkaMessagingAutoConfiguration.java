@@ -87,6 +87,10 @@ public class KafkaMessagingAutoConfiguration {
             topics.add(TopicBuilder.name(topic).partitions(properties.topicPartitions()).build());
             topics.add(TopicBuilder.name(Topics.dlt(topic)).partitions(1).build());
         }
+        // Full-state snapshots: Kafka keeps only the newest per merchant, so replicas can always be rebuilt
+        // from the beginning of the topic.
+        topics.add(TopicBuilder.name(Topics.MERCHANT_SNAPSHOTS).partitions(properties.topicPartitions()).compact().build());
+        topics.add(TopicBuilder.name(Topics.dlt(Topics.MERCHANT_SNAPSHOTS)).partitions(1).build());
         return new KafkaAdmin.NewTopics(topics.toArray(org.apache.kafka.clients.admin.NewTopic[]::new));
     }
 }

@@ -8,7 +8,7 @@ import java.time.Duration;
 
 /**
  * @param provider       {@code razorpay} or {@code simulated}
- * @param refundWindow   how long after capture a refund is accepted
+ * @param refundWindow   how long after capture a refund is accepted, unless the merchant snapshot sets its own
  * @param idempotencyTtl how long Idempotency-Key records are kept
  */
 @ConfigurationProperties("hpg.refund")

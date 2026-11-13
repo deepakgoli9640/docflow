@@ -28,7 +28,7 @@ class MerchantConfigurationValidationTest {
 
     private final MerchantConfigurationService service = new MerchantConfigurationService(
             mock(com.hpg.merchant.infrastructure.persistence.MerchantConfigurationRepository.class),
-            mock(MerchantLookup.class), properties, mock(AuditLogger.class));
+            mock(MerchantLookup.class), properties, mock(AuditLogger.class), mock(MerchantSnapshots.class));
 
     private static PaymentSettings settings(String min, String max, String daily, int ttl, String webhook) {
         return new PaymentSettings(Set.of(PaymentMethod.UPI), CaptureMode.MANUAL, Money.inr(min), Money.inr(max),

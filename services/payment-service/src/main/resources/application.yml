@@ -35,6 +35,12 @@ spring:
         max.block.ms: 5000
         request.timeout.ms: 5000
         delivery.timeout.ms: 10000
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+    listener:
+      ack-mode: record
   jackson:
     default-property-inclusion: non_null
     deserialization:

@@ -7,6 +7,7 @@ import com.hpg.refund.domain.InitiatedBy;
 import com.hpg.refund.domain.Refund;
 import com.hpg.refund.domain.RefundErrorCode;
 import com.hpg.refund.domain.RefundablePayment;
+import com.hpg.refund.infrastructure.persistence.MerchantReplicaStore;
 import com.hpg.refund.infrastructure.persistence.RefundRepository;
 import com.hpg.refund.infrastructure.persistence.RefundablePaymentStore;
 import com.hpg.refund.provider.RefundProvider;
@@ -34,6 +35,7 @@ public class RefundService {
     static final String OPERATION = "CREATE_REFUND";
 
     private final RefundablePaymentStore refundables;
+    private final MerchantReplicaStore merchants;
     private final RefundRepository refunds;
     private final RefundTransitions transitions;
     private final IdempotencyService idempotency;
@@ -43,10 +45,12 @@ public class RefundService {
     private final TransactionTemplate tx;
     private final Clock clock;
 
-    public RefundService(RefundablePaymentStore refundables, RefundRepository refunds, RefundTransitions transitions,
+    public RefundService(RefundablePaymentStore refundables, MerchantReplicaStore merchants, RefundRepository refunds,
+            RefundTransitions transitions,
             IdempotencyService idempotency, RefundProcessor processor, RefundProvider provider,
             RefundProperties properties, PlatformTransactionManager txManager, Clock clock) {
         this.refundables = refundables;
+        this.merchants = merchants;
         this.refunds = refunds;
         this.transitions = transitions;
         this.idempotency = idempotency;
@@ -73,6 +77,12 @@ public class RefundService {
 
     private Refund reserveAndCreate(CreateRefundCommand c, String key, String hash) {
         Instant now = clock.instant();
+        // No replica yet = the snapshot is still on its way; the merchant got a token, so it was active then.
+        var merchant = merchants.find(c.merchantId());
+        if (merchant.isPresent() && !merchant.get().isActive()) {
+            throw new BusinessException(RefundErrorCode.MERCHANT_SUSPENDED,
+                    "Refunds are not available while the merchant is " + merchant.get().status().toLowerCase() + ".");
+        }
         RefundablePayment payment = refundables.find(c.paymentId(), c.merchantId()).orElseThrow(() ->
                 // We cannot tell "never captured" from "capture event not consumed yet": answer retryably.
                 new BusinessException(RefundErrorCode.PAYMENT_NOT_YET_REFUNDABLE,
@@ -87,9 +97,11 @@ public class RefundService {
             throw new BusinessException(RefundErrorCode.PROVIDER_MISMATCH, "The payment was processed by "
                     + payment.provider() + ", which this deployment is not configured to refund.");
         }
-        if (payment.capturedAt().plus(properties.refundWindow()).isBefore(now)) {
+        java.time.Duration window = merchant.map(m -> java.time.Duration.ofDays(m.refundWindowDays()))
+                .orElse(properties.refundWindow());
+        if (payment.capturedAt().plus(window).isBefore(now)) {
             throw new BusinessException(RefundErrorCode.REFUND_WINDOW_EXPIRED, "Refunds are accepted for "
-                    + properties.refundWindow().toDays() + " days after capture.");
+                    + window.toDays() + " days after capture.");
         }
         if (!refundables.reserve(c.paymentId(), c.merchantId(), c.amount(), now)) {
             Money remaining = refundables.find(c.paymentId()).orElseThrow().remainingRefundable();

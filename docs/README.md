@@ -55,7 +55,7 @@ designed but not built.
 | Audit log (append-only, DB trigger) | **Real** | merchant-service |
 | Webhook secret encryption at rest (AES-256-GCM) | **Real** | |
 | Gateway routing, correlation IDs, Problem Details errors, Redis rate limiting | **Real** | Routes to merchant, payment, refund, transaction and notification services |
-| Gateway deny-list for suspended merchants | **Not yet** | Needs merchant snapshot events (not built yet). Until then a suspended merchant's existing token works for ≤ 15 min; new tokens are refused immediately. |
+| Gateway deny-list for suspended merchants | **Real** | Redis, fed by `merchant.snapshots.v1`: a suspended merchant's existing tokens are refused within seconds (fails open if Redis is down; payment/refund replicas still refuse). |
 | Internal webhook-config endpoint for notification-service | **Real** | Called with a client-credentials token (SERVICE role), cached 60 s |
 | Docker images, Compose profiles `infra` (+Kafka) / `core` / `refund` / `transactions` / `notify`, per-service DB users | **Real** | Observability profile in Phase 7 |
 | CI (GitHub Actions: build + all tests) | **Real** | Image publishing, coverage, secret scanning in Phase 8 |
@@ -70,7 +70,7 @@ designed but not built.
 | Simulated payment provider (`HPG_PAYMENT_PROVIDER=simulated`) | **Simulated** | In-memory, for local demos only; clearly labelled on the checkout page and in logs |
 | Outbox → Kafka relay (in order, one active relay per service via advisory lock, `acks=all`) | **Real** | payment-, refund- and notification-service; tested against Testcontainers Kafka |
 | Consumers: envelope parsing, `processed_events` dedupe, blocking retry with backoff, `<topic>.dlt` | **Real** | Shared in `platform/messaging` |
-| Merchant config replica in payment-service | **Real table, seeded manually** | TEMPORARY OPS endpoint until `merchant.snapshots.v1` replication is built |
+| Merchant snapshots (`merchant.snapshots.v1`, compacted): published on every change via the outbox, backfilled at startup, OPS republish | **Real** | Feeds payment-service's merchant replica, refund-service (status, refund window) and the gateway deny-list; the temporary seeding endpoint is gone |
 | Refunds: full/partial, atomic reservation (concurrency-tested), idempotency, state machine, webhooks, lookup-before-retry recovery | **Real** | refund-service; Razorpay refund adapter tested against WireMock only |
 | Simulated refund provider | **Simulated** | Same `HPG_PAYMENT_PROVIDER=simulated` switch; refunds complete immediately |
 | Transaction history and status (payments + refunds), stale-event protection, timeline | **Real** | transaction-service, built from events |
@@ -79,4 +79,4 @@ designed but not built.
 | Patient emails (receipt / failed / expired) via SMTP | **Real** | Mailpit locally; addresses encrypted at rest |
 | SMS | **Not yet** | |
 | Web dashboard: hospital view (payments, refunds, transactions, notifications, settings) and operations view (hospitals, failed notifications, ledger) | **Real** | `ui/dashboard`, Compose profile `dashboard`; browser-tested end to end. Sign-in uses client credentials (production would add OIDC user login) |
-| Merchant snapshot replication, gateway deny-list, reconciliation | **Not yet** | Phase 6+ |
+| Reconciliation | **Not yet** | Phase 6 |

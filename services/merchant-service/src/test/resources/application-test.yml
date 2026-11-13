@@ -1,5 +1,13 @@
 # Test-only values. These secrets protect nothing outside a throwaway Testcontainers database.
+spring:
+  kafka:
+    admin:
+      auto-create: false        # tests assert on the outbox table; no Kafka needed
 hpg:
+  messaging:
+    outbox:
+      relay:
+        enabled: false
   merchant:
     allow-insecure-webhooks: false
   security:

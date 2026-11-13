@@ -11,6 +11,13 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       timeout: 500ms
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   cloud:
     gateway:
       server:
@@ -68,7 +75,7 @@ spring:
             - id: payment-api
               uri: ${HPG_PAYMENT_SERVICE_URI:http://localhost:8082}
               predicates:
-                - Path=/api/v1/payments,/api/v1/payments/**,/api/v1/admin/merchant-config-replicas/**
+                - Path=/api/v1/payments,/api/v1/payments/**
               filters:
                 - name: RequestRateLimiter
                   args:
@@ -142,6 +149,9 @@ spring:
 
 hpg:
   gateway:
+    deny-list:
+      # Longer than the 15-minute token lifetime: after that a suspended merchant has no valid token left.
+      ttl: 20m
     jwt:
       jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
       issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}

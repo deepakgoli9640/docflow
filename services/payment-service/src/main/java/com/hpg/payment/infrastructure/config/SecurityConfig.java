@@ -43,7 +43,6 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole(Roles.OPS)
                         .requestMatchers("/api/v1/payments", "/api/v1/payments/**").hasRole(Roles.MERCHANT)
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(rs -> rs

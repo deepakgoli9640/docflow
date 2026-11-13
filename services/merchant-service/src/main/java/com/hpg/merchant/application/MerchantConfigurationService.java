@@ -29,14 +29,16 @@ public class MerchantConfigurationService {
     private final MerchantProperties properties;
     private final WebhookUrlValidator webhookUrlValidator;
     private final AuditLogger audit;
+    private final MerchantSnapshots snapshots;
 
     public MerchantConfigurationService(MerchantConfigurationRepository configurations, MerchantLookup lookup,
-            MerchantProperties properties, AuditLogger audit) {
+            MerchantProperties properties, AuditLogger audit, MerchantSnapshots snapshots) {
         this.configurations = configurations;
         this.lookup = lookup;
         this.properties = properties;
         this.webhookUrlValidator = new WebhookUrlValidator(properties.allowInsecureWebhooks());
         this.audit = audit;
+        this.snapshots = snapshots;
     }
 
     @PreAuthorize("hasRole('MERCHANT')")
@@ -56,7 +58,8 @@ public class MerchantConfigurationService {
     @PreAuthorize("hasRole('MERCHANT')")
     @Transactional
     public MerchantConfiguration update(UUID merchantId, PaymentSettings settings) {
-        lookup.require(merchantId).requireNotDeactivated();
+        var merchant = lookup.require(merchantId);
+        merchant.requireNotDeactivated();
         validate(settings);
         MerchantConfiguration configuration = require(merchantId);
         configuration.apply(settings);
@@ -66,6 +69,7 @@ public class MerchantConfigurationService {
                 "maxAmountPerTransaction", settings.maxAmountPerTransaction().amount().toPlainString(),
                 "dailyLimit", settings.dailyLimit().amount().toPlainString(),
                 "webhookConfigured", settings.webhookUrl() != null));
+        snapshots.publish(merchant);
         return configuration;
     }
 

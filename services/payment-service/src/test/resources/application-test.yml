@@ -2,7 +2,9 @@
 spring:
   kafka:
     admin:
-      auto-create: false        # most tests run without Kafka; OutboxRelayIT starts one
+      auto-create: false        # most tests run without Kafka; the messaging ITs start one
+    listener:
+      auto-startup: false       # no merchant snapshot consumer unless a test starts Kafka
 hpg:
   messaging:
     outbox:

@@ -96,10 +96,13 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       MERCHANT_DB_HOST: postgres
       HPG_TOKEN_ISSUER: http://merchant-service:8081
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
     ports:
       - "127.0.0.1:8081:8081"   # published for debugging only; clients go through the gateway
     depends_on:
       postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health/readiness || exit 1"]
@@ -231,6 +234,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092   # merchant snapshots feed the suspended-merchant deny-list
       HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
       HPG_PAYMENT_SERVICE_URI: http://payment-service:8082
       HPG_REFUND_SERVICE_URI: http://refund-service:8083

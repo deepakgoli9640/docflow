@@ -87,10 +87,13 @@ class ApiGatewayIT {
         registry.add("HPG_RATE_TOKEN_PER_SEC", () -> "1");
         registry.add("HPG_RATE_TOKEN_BURST", () -> "3");
         registry.add("HPG_GATEWAY_MANAGEMENT_PORT", () -> "0");
+        registry.add("hpg.gateway.deny-list.consumer-enabled", () -> "false"); // no Kafka here; the list is set in Redis
     }
 
     @Autowired
     WebTestClient client;
+    @Autowired
+    com.hpg.gateway.denylist.MerchantDenyList denyList;
 
     @BeforeEach
     void stubMerchantService() {
@@ -103,9 +106,14 @@ class ApiGatewayIT {
     }
 
     private static String token(RSAKey key, String issuer, List<String> roles, Instant expiresAt) throws Exception {
+        return token(key, issuer, roles, expiresAt, UUID.randomUUID());
+    }
+
+    private static String token(RSAKey key, String issuer, List<String> roles, Instant expiresAt, UUID merchantId)
+            throws Exception {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .issuer(issuer).subject("hpgk_test")
-                .claim("roles", roles).claim("mid", UUID.randomUUID().toString())
+                .claim("roles", roles).claim("mid", merchantId.toString())
                 .issueTime(new Date()).expirationTime(Date.from(expiresAt))
                 .build();
         SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(key.getKeyID()).build(), claims);
@@ -115,6 +123,42 @@ class ApiGatewayIT {
 
     private static String merchantToken() throws Exception {
         return token(signingKey, ISSUER, List.of("MERCHANT"), Instant.now().plusSeconds(600));
+    }
+
+    @Test
+    void tokensOfASuspendedMerchantAreRefusedUntilReactivation() throws Exception {
+        UUID merchantId = UUID.randomUUID();
+        String token = token(signingKey, ISSUER, List.of("MERCHANT"), Instant.now().plusSeconds(600), merchantId);
+        denyList.apply(merchantId, "SUSPENDED").block();
+
+        client.get().uri("/api/v1/merchants/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .expectBody().jsonPath("$.errorCode").isEqualTo("MERCHANT_SUSPENDED");
+        MERCHANT_SERVICE.verify(0, getRequestedFor(urlEqualTo("/api/v1/merchants/me")));
+
+        // Other merchants are unaffected.
+        client.get().uri("/api/v1/merchants/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken())
+                .exchange().expectStatus().isOk();
+
+        denyList.apply(merchantId, "ACTIVE").block();
+        client.get().uri("/api/v1/merchants/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange().expectStatus().isOk();
+    }
+
+    @Test
+    void opsTokensWithoutAMerchantIdPassTheDenyListCheck() throws Exception {
+        // Real OPS and SERVICE tokens carry no "mid" claim.
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(ISSUER).subject("ops-console").claim("roles", List.of("OPS"))
+                .issueTime(new Date()).expirationTime(Date.from(Instant.now().plusSeconds(600)))
+                .build();
+        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(signingKey.getKeyID()).build(), claims);
+        jwt.sign(new RSASSASigner(signingKey));
+        client.get().uri("/api/v1/admin/merchants").header(HttpHeaders.AUTHORIZATION, "Bearer " + jwt.serialize())
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test

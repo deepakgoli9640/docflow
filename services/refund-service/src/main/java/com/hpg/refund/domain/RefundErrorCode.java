@@ -7,6 +7,7 @@ public enum RefundErrorCode implements ErrorCode {
     REFUND_NOT_FOUND(404, "Refund not found"),
     PAYMENT_NOT_YET_REFUNDABLE(409, "Payment is not (yet) refundable"),
     REQUEST_IN_PROGRESS(409, "A request with this Idempotency-Key is still being processed"),
+    MERCHANT_SUSPENDED(403, "Merchant is not active"),
     PROVIDER_MISMATCH(409, "The payment was made with a provider this deployment cannot refund"),
     IDEMPOTENCY_KEY_REUSED(422, "Idempotency-Key was already used with a different request"),
     INVALID_IDEMPOTENCY_KEY(400, "Idempotency-Key header is invalid"),

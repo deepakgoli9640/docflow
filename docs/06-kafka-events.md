@@ -131,9 +131,10 @@ flowchart LR
 
 | Consumer (group) | Topics | Purpose | Retry style |
 |---|---|---|---|
-| payment-service `payment-merchant-replica` *(not built yet)* | merchant.snapshots.v1 | merchant config replica | blocking |
+| payment-service `payment-merchant-replica` ✅ | merchant.snapshots.v1 | merchant config replica (idempotent by `snapshotVersion`) | blocking |
 | refund-service `refund-payment-replica` ✅ | payment.events.v1 (`PaymentCaptured`) | `refundable_payments` | blocking |
-| refund-service `refund-merchant-replica` *(not built yet)* | merchant.snapshots.v1 | merchant status/limits | blocking |
+| refund-service `refund-merchant-replica` ✅ | merchant.snapshots.v1 | status (suspended → no refunds), refund window | blocking |
+| api-gateway `api-gateway-deny-list` ✅ | merchant.snapshots.v1 | Redis deny-list of suspended/deactivated merchants (one group for all gateway replicas: the list is shared) | blocking |
 | transaction-service `transaction-payments` ✅ | payment.events.v1 | history, status, capture postings | **blocking** (order matters) |
 | transaction-service `transaction-refunds` ✅ | refund.events.v1 | history, status, refund postings (waits for the capture) | **blocking** |
 | notification-service `notification-payments` / `notification-refunds` ✅ | payment / refund events | create notification rows (delivery is a separate DB-driven dispatcher with its own retries) | blocking (intake is local and fast) |
