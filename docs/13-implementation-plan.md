@@ -57,11 +57,15 @@ Delivered as planned, with these differences:
 - **Exit:** a real Razorpay **test-mode** payment completed through the checkout page (if you
   provide sandbox keys), or the simulator flow, with the difference stated.
 
-## Phase 4 — Kafka, outbox, notification-service ✅ done (merchant snapshots pending)
+## Phase 4 — Kafka, outbox, notification-service ✅ done
 
 Delivered, with these differences:
-- **Merchant snapshot replication (`merchant.snapshots.v1`) is not built yet.** payment-service's replica
-  is still seeded through the temporary OPS endpoint, and the gateway deny-list still waits for it.
+- Merchant snapshot replication (`merchant.snapshots.v1`) came in a follow-up: merchant-service publishes a
+  full snapshot through its outbox on registration, status, profile and configuration changes (startup
+  backfill + OPS republish); payment-service's replica, refund-service (status, refund window) and the
+  gateway's Redis deny-list consume it. The temporary seeding endpoint was removed. Tests: MerchantSnapshotIT,
+  MerchantReplicationIT, refund suspension/window ITs, gateway deny-list IT; `smoke-test-phase4.sh` step 6
+  suspends a hospital mid-session.
 - Notification retries are **database-driven** (`next_attempt_at`, exponential backoff + jitter, lease-based
   claiming with `SKIP LOCKED`) instead of Kafka retry topics: intake only stores rows, so the partition never
   waits on a hospital endpoint, and multi-hour retries do not belong in Kafka anyway (D18 already said so

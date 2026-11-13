@@ -1,23 +1,10 @@
-### Healthcare Payment Gateway - payment flow (Phase 3)
+### Healthcare Payment Gateway - payment flow
 ### Prerequisites: merchant registered + activated + token (see merchant.http), stack running with
 ###   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d
+### The hospital's settings reach payment-service automatically (merchant.snapshots.v1) within seconds of
+### activation or a configuration change; until then payment creation answers 403 MERCHANT_NOT_ACTIVE.
 
 @gw = http://localhost:8080
-
-### 0. TEMPORARY: copy the merchant's configuration into payment-service (OPS token). It will be replaced
-###    by merchant.snapshots.v1 replication (not built yet), and this endpoint removed.
-PUT {{gw}}/api/v1/admin/merchant-config-replicas/{{merchantId}}
-Authorization: Bearer {{opsToken}}
-Content-Type: application/json
-
-{
-  "displayName": "City Hospital", "status": "ACTIVE", "enabledMethods": ["UPI", "CARD"],
-  "captureMode": "AUTO",
-  "minAmount": { "amount": "1.00", "currency": "INR" },
-  "maxAmountPerTransaction": { "amount": "200000.00", "currency": "INR" },
-  "dailyLimit": { "amount": "1000000.00", "currency": "INR" },
-  "paymentTtlMinutes": 60, "maxAttempts": 3
-}
 
 ### 1. Initiate a payment. Idempotency-Key is REQUIRED; reuse it when retrying the same request.
 POST {{gw}}/api/v1/payments

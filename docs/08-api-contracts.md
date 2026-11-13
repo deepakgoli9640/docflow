@@ -25,7 +25,9 @@ publishes OpenAPI 3 docs (springdoc) at `/v3/api-docs` and Swagger UI at `/swagg
 |---|---|---|---|---|
 | POST | `/api/v1/merchants` | public (rate-limited) | 201 | Register hospital → `PENDING_ACTIVATION`; returns first API key and webhook secret once |
 | POST | `/api/v1/admin/merchants/{id}/activate` | OPS | 200 | Activate (or reactivate a suspended merchant); body `{"reason": "..."}` |
-| POST | `/api/v1/admin/merchants/{id}/suspend` | OPS | 200 | Suspend: new tokens refused immediately (gateway deny-list for existing tokens: Phase 4) |
+| POST | `/api/v1/admin/merchants/{id}/suspend` | OPS | 200 | Suspend: new tokens refused immediately; existing tokens refused by the gateway deny-list within seconds |
+| GET | `/api/v1/admin/merchants/{id}/configuration` | OPS | 200 | A merchant's payment configuration (never the webhook secret) |
+| POST | `/api/v1/admin/merchants/snapshots/republish` | OPS | 200 | Republish every merchant snapshot (rebuilds downstream replicas; safe to repeat) |
 | POST | `/api/v1/admin/merchants/{id}/deactivate` | OPS | 200 | Permanent |
 | GET | `/api/v1/admin/merchants?status=&page=&sort=` | OPS | 200 | List merchants (sort: createdAt, updatedAt, legalName, status) |
 | GET | `/api/v1/admin/merchants/{id}` | OPS | 200 | One merchant |
@@ -60,7 +62,6 @@ rejected with `422 LIMIT_EXCEEDS_PLATFORM_MAXIMUM`. A merchant can hold at most 
 | POST | `/webhooks/razorpay/payments` | public, signature-verified | 200 | Provider webhooks |
 
 | POST | `/checkout/{checkoutToken}/simulate` | public | 200 | **Simulated provider only** (404 otherwise) |
-| PUT | `/api/v1/admin/merchant-config-replicas/{merchantId}` | OPS | 200 | **TEMPORARY (Phase 3)**: seed payment-service's merchant replica; removed in Phase 4 |
 
 Capture answers **202** with status `UNKNOWN` when the provider did not respond in time; the payment is
 verified automatically and must not be captured again with a new key. Full samples:

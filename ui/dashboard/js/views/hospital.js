@@ -439,7 +439,7 @@ export async function settings(main) {
         ['Patient emails', config.notifyPatientEmail ? 'On' : 'Off'],
         ['Last changed', dateTime(config.updatedAt)],
       ]),
-      h('p', { class: 'muted small' }, 'Payment processing picks up changes when operations syncs your configuration.'),
+      h('p', { class: 'muted small' }, 'Changes apply to new payments within a few seconds.'),
       h('div', { class: 'actions' }, button('Edit configuration', () => configDialog(config, reload, false)))),
     card('API keys',
       h('p', { class: 'muted small' }, 'Up to two active keys, so you can rotate without downtime. Secrets are shown once.'),

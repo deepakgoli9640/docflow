@@ -64,21 +64,6 @@ export async function merchants(main, params) {
   await reload();
 }
 
-/**
- * Copies the hospital's configuration into payment-service (temporary admin endpoint, until merchant
- * snapshot events replicate it automatically). Payment creation checks this copy.
- */
-async function syncToPaymentService(m, config) {
-  await api(`/api/v1/admin/merchant-config-replicas/${m.id}`, {
-    method: 'PUT',
-    body: {
-      displayName: m.displayName, status: m.status, enabledMethods: config.enabledMethods, captureMode: config.captureMode,
-      minAmount: config.minAmount, maxAmountPerTransaction: config.maxAmountPerTransaction, dailyLimit: config.dailyLimit,
-      paymentTtlMinutes: config.paymentTtlMinutes, maxAttempts: config.maxAttempts,
-    },
-  });
-}
-
 function merchantDrawer(id, onChange) {
   drawer('Hospital', async (ctx) => {
     const [m, config, balance] = await Promise.all([
@@ -89,11 +74,7 @@ function merchantDrawer(id, onChange) {
     const changeStatus = (action, label, message, danger) => button(label, () => confirmDialog(`${label}: ${m.displayName}`, message,
       async (v) => {
         const { data } = await api(`/api/v1/admin/merchants/${id}/${action}`, { method: 'POST', body: { reason: v.reason } });
-        let synced = '';
-        if (config) {
-          try { await syncToPaymentService(data, config); synced = ' and synced to payment processing'; } catch { synced = ' (sync to payment processing failed: use Sync)'; }
-        }
-        toast(`${data.displayName} is now ${humanize(data.status).toLowerCase()}${synced}`);
+        toast(`${data.displayName} is now ${humanize(data.status).toLowerCase()}`);
         ctx.refresh(); onChange?.();
       }, { confirmLabel: label, danger, reason: 'Reason (written to the audit log)' }),
     { variant: danger ? 'danger' : 'primary' });
@@ -103,17 +84,10 @@ function merchantDrawer(id, onChange) {
       actions.push(changeStatus('activate', 'Activate', 'The hospital can sign in and take payments again.', false));
     }
     if (m.status === 'ACTIVE') {
-      actions.push(changeStatus('suspend', 'Suspend', 'New sign-ins are refused immediately; existing tokens expire within 15 minutes.', true));
+      actions.push(changeStatus('suspend', 'Suspend', 'New sign-ins are refused immediately, and existing sessions are blocked within seconds.', true));
     }
     if (m.status !== 'DEACTIVATED') {
       actions.push(changeStatus('deactivate', 'Deactivate', 'Permanent. The hospital can never be reactivated.', true));
-    }
-    if (config) {
-      actions.push(button('Sync to payment processing', async (e) => {
-        e.target.disabled = true;
-        try { await syncToPaymentService(m, config); toast('Configuration synced to payment-service'); } catch (err) { toast(err.message, 'bad'); }
-        e.target.disabled = false;
-      }));
     }
 
     return h('div', { class: 'stack' },
@@ -136,8 +110,8 @@ function merchantDrawer(id, onChange) {
         ['Webhook URL', config.webhookUrl || 'Not configured'],
         ['Last changed', dateTime(config.updatedAt)],
       ]) : emptyState('Configuration unavailable.'),
-      h('p', { class: 'muted small' }, 'Payment processing uses a copy of this configuration. Status changes made here '
-        + 'sync it automatically; use "Sync" after the hospital edits its configuration.'),
+      h('p', { class: 'muted small' }, 'Payment processing, refunds and the gateway receive every change to this hospital '
+        + 'automatically within seconds.'),
       h('p', {}, h('a', { href: `#/notifications?merchantId=${id}`, onClick: () => ctx.close() }, 'Notifications for this hospital →')));
   });
 }

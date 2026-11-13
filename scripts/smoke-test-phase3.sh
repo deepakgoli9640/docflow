@@ -22,14 +22,8 @@ curl -s -o /dev/null -X POST -H "Authorization: Bearer $OPS" -H 'Content-Type: a
   -d '{"reason":"KYC verified"}' "$GW/api/v1/admin/merchants/$MID/activate"
 TOKEN=$(curl -s -u "$KEY_ID:$KEY_SECRET" -d grant_type=client_credentials "$GW/oauth2/token" | jq -r .access_token)
 
-seed_replica() { # TEMPORARY (Phase 3): copy merchant config into payment-service; Phase 4 does this via Kafka
-  curl -s -o /dev/null -w '%{http_code}' -X PUT "$GW/api/v1/admin/merchant-config-replicas/$MID" \
-    -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' -d "{\"displayName\":\"City Hospital\",
-    \"status\":\"ACTIVE\",\"enabledMethods\":[\"UPI\",\"CARD\"],\"captureMode\":\"$1\",
-    \"minAmount\":{\"amount\":\"1.00\",\"currency\":\"INR\"},\"maxAmountPerTransaction\":{\"amount\":\"200000.00\",\"currency\":\"INR\"},
-    \"dailyLimit\":{\"amount\":\"1000000.00\",\"currency\":\"INR\"},\"paymentTtlMinutes\":60,\"maxAttempts\":3}"
-}
-expect 200 "$(seed_replica AUTO)" "seed merchant replica (temporary endpoint)"
+source scripts/lib/merchant.sh
+wait_until_payable AUTO && echo "ok: payment-service has the merchant's settings (merchant.snapshots.v1)"
 
 create() { # create <idempotency-key> <reference> <amount>
   curl -s -w '\n%{http_code}' -X POST "$GW/api/v1/payments" -H "Authorization: Bearer $TOKEN" \
@@ -63,7 +57,7 @@ expect CAPTURED "$(curl -s -H "Authorization: Bearer $TOKEN" "$GW/api/v1/payment
 curl -s -H "Authorization: Bearer $TOKEN" "$GW/api/v1/payments/$PID" | jq -c '[.statusHistory[] | "\(.from // "-")->\(.to) (\(.source))"]'
 
 step "5. MANUAL capture: authorize at checkout, then the hospital captures"
-expect 200 "$(seed_replica MANUAL)" "switch merchant to MANUAL capture (temporary endpoint)"
+set_capture_mode MANUAL && wait_until_payable MANUAL && echo "ok: switched to MANUAL capture; replicated to payment-service"
 OUT=$(create "$(uuid)" "BILL-$RANDOM$RANDOM" "5000.00"); PID2=$(sed '$d' <<<"$OUT" | jq -r .id)
 CO2=$(sed '$d' <<<"$OUT" | jq -r .checkoutUrl); P2=${CO2#*://*/}
 curl -s -o /dev/null -X POST "$GW/$P2/simulate" -d outcome=SUCCESS

@@ -97,6 +97,8 @@ class RefundFlowIT {
     RefundRecoveryService recovery;
     @Autowired
     OutboxEventRepository outbox;
+    @Autowired
+    com.hpg.refund.infrastructure.persistence.MerchantReplicaStore merchants;
 
     UUID merchantId;
 
@@ -112,10 +114,14 @@ class RefundFlowIT {
 
     /** Publishes PaymentCaptured as payment-service would and waits until refund-service has consumed it. */
     UUID capturedPayment(String amount, String providerPaymentId) throws Exception {
+        return capturedPayment(amount, providerPaymentId, Instant.now());
+    }
+
+    UUID capturedPayment(String amount, String providerPaymentId, Instant capturedAt) throws Exception {
         UUID paymentId = Ids.newId();
         PaymentEventPayload payload = new PaymentEventPayload(paymentId, merchantId, "BILL-" + paymentId.toString().substring(0, 8),
                 Money.inr(amount), "CAPTURED", "PROCESSING", "AUTO", "RAZORPAY", "order_1", providerPaymentId, false,
-                null, null, Instant.now(), null);
+                null, null, capturedAt, null);
         EventEnvelope<PaymentEventPayload> envelope = new EventEnvelope<>(Ids.newId(), "PaymentCaptured", 1, Instant.now(),
                 "payment-service", "Payment", paymentId.toString(), 3, merchantId, "corr", "test", payload);
         String value = json.writeValueAsString(envelope);
@@ -265,6 +271,45 @@ class RefundFlowIT {
         assertThat(refundables.find(paymentId).orElseThrow().remainingRefundable()).isEqualTo(Money.inr("250.00"));
         assertThat(outbox.findByAggregateIdOrderByIdAsc(created.get("id").asText()))
                 .extracting(OutboxEvent::getEventType).containsExactly("RefundInitiated", "RefundFailed");
+    }
+
+    /** Publishes a merchant snapshot and waits until refund-service holds it. */
+    void merchantSnapshot(long version, String status, int refundWindowDays) throws Exception {
+        var payload = new com.hpg.events.merchant.MerchantSnapshotPayload(merchantId, version, "City Hospital", status,
+                java.util.Set.of("UPI"), "AUTO", Money.inr("1.00"), Money.inr("50000.00"), Money.inr("100000.00"), 60, 3,
+                refundWindowDays, false, true, Instant.now());
+        var envelope = new EventEnvelope<>(Ids.newId(), "MerchantSnapshot", 1, Instant.now(), "merchant-service", "Merchant",
+                merchantId.toString(), version, merchantId, null, null, payload);
+        kafka.send(Topics.MERCHANT_SNAPSHOTS, merchantId.toString(), json.writeValueAsString(envelope)).get();
+        await().atMost(Duration.ofSeconds(60)).until(() -> merchants.find(merchantId)
+                .map(m -> m.snapshotVersion() >= version).orElse(false));
+    }
+
+    @Test
+    void suspendedMerchantCannotRefundAndReactivationRestoresIt() throws Exception {
+        UUID paymentId = capturedPayment("400.00", "pay_S");
+        razorpay.stubFor(WireMock.post("/v1/payments/pay_S/refund").willReturn(okJson(refundJson("rfnd_S1", "processed", 10000,
+                "{{jsonPath request.body '$.receipt'}}")).withTransformers("response-template")));
+        merchantSnapshot(1, "SUSPENDED", 180);
+
+        MvcResult blocked = refund(paymentId, "100.00", "key-suspended-1");
+        assertThat(blocked.getResponse().getStatus()).isEqualTo(403);
+        assertThat(json.readTree(blocked.getResponse().getContentAsString()).get("errorCode").asText())
+                .isEqualTo("MERCHANT_SUSPENDED");
+
+        merchantSnapshot(2, "ACTIVE", 180);
+        assertThat(refund(paymentId, "100.00", "key-suspended-2").getResponse().getStatus()).isEqualTo(201);
+    }
+
+    @Test
+    void merchantsOwnRefundWindowApplies() throws Exception {
+        merchantSnapshot(1, "ACTIVE", 5);
+        UUID old = capturedPayment("300.00", "pay_W", Instant.now().minus(Duration.ofDays(10)));
+        MvcResult result = refund(old, "50.00", "key-window-1");
+        assertThat(result.getResponse().getStatus()).isEqualTo(422);
+        assertThat(json.readTree(result.getResponse().getContentAsString()).get("errorCode").asText())
+                .isEqualTo("REFUND_WINDOW_EXPIRED");
+        assertThat(json.readTree(result.getResponse().getContentAsString()).get("detail").asText()).contains("5 days");
     }
 
     @Test

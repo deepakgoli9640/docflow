@@ -19,10 +19,12 @@ public class MerchantProfileService {
 
     private final MerchantLookup lookup;
     private final AuditLogger audit;
+    private final MerchantSnapshots snapshots;
 
-    public MerchantProfileService(MerchantLookup lookup, AuditLogger audit) {
+    public MerchantProfileService(MerchantLookup lookup, AuditLogger audit, MerchantSnapshots snapshots) {
         this.lookup = lookup;
         this.audit = audit;
+        this.snapshots = snapshots;
     }
 
     @PreAuthorize("hasRole('MERCHANT')")
@@ -44,6 +46,9 @@ public class MerchantProfileService {
             changed.put("contactPhone", "changed"); // PII: record that it changed, not the value
         }
         audit.record(merchantId, AuditAction.PROFILE_UPDATED, changed);
+        if (displayName != null) {
+            snapshots.publish(merchant); // the display name is part of the snapshot (shown on the checkout page)
+        }
         return merchant;
     }
 }

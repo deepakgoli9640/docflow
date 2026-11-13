@@ -1,7 +1,7 @@
 package com.hpg.gateway.error;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hpg.common.error.CommonErrorCode;
+import com.hpg.common.error.ErrorCode;
 import com.hpg.gateway.filter.CorrelationIdWebFilter;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.MediaType;
@@ -20,7 +20,7 @@ public final class GatewayProblems {
     private GatewayProblems() {
     }
 
-    public static Mono<Void> write(ServerWebExchange exchange, ObjectMapper mapper, CommonErrorCode code, String detail) {
+    public static Mono<Void> write(ServerWebExchange exchange, ObjectMapper mapper, ErrorCode code, String detail) {
         ServerHttpResponse response = exchange.getResponse();
         if (response.isCommitted()) {
             return Mono.empty();

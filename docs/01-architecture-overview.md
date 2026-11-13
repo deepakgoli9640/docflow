@@ -229,7 +229,7 @@ transaction-service is down; the ledger catches up when it returns.
 
 | Situation | Handling |
 |---|---|
-| Merchant config changed, payment-service replica not yet updated | Seconds of lag, acceptable. **Suspension** must be immediate, so the gateway also keeps a Redis deny-list updated from the same event and checked on every request. |
+| Merchant config changed, payment-service replica not yet updated | Seconds of lag, acceptable (payment creation answers `403 MERCHANT_NOT_ACTIVE` until a new merchant's first snapshot arrives). **Suspension** must be immediate, so the gateway also keeps a Redis deny-list updated from the same event and checked on every request. |
 | Refund requested milliseconds after capture, before refund-service has consumed `PaymentCaptured` | `409 PAYMENT_NOT_YET_REFUNDABLE` with `Retry-After: 2`. Documented to merchants. Lag is observable via consumer-lag metrics. |
 | Ledger receives `RefundCompleted` before `PaymentCaptured` (different topics) | Ledger treats a missing prerequisite as a *retryable* error; blocking retry with backoff until the capture is posted, then DLQ if it never arrives. |
 | Hospital webhooks delivered out of order | Every webhook carries the full current status, `occurredAt` and a per-payment `sequence`, so the hospital can ignore stale ones. |

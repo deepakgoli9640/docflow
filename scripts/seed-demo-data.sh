@@ -17,23 +17,18 @@ register() { # register <display name> <legal name>
   curl -sf -X POST "$GW/api/v1/merchants" -H 'Content-Type: application/json' -d "{\"legalName\":\"$2\",
     \"displayName\":\"$1\",\"contactEmail\":\"billing+$(date +%s%N)@$(tr -dc a-z <<<"${1,,}").example\",\"contactPhone\":\"+919800001234\"}"
 }
-replica() { # replica <merchantId> <displayName> <AUTO|MANUAL>
-  curl -sf -o /dev/null -X PUT "$GW/api/v1/admin/merchant-config-replicas/$1" -H "Authorization: Bearer $OPS" \
-    -H 'Content-Type: application/json' -d "{\"displayName\":\"$2\",\"status\":\"ACTIVE\",\"enabledMethods\":[\"UPI\",\"CARD\"],
-    \"captureMode\":\"$3\",\"minAmount\":{\"amount\":\"1.00\",\"currency\":\"INR\"},
-    \"maxAmountPerTransaction\":{\"amount\":\"500000.00\",\"currency\":\"INR\"},
-    \"dailyLimit\":{\"amount\":\"5000000.00\",\"currency\":\"INR\"},\"paymentTtlMinutes\":60,\"maxAttempts\":3}"
-}
 
 echo "Registering hospitals..."
 REG=$(register "City Hospital" "City Hospital Pvt Ltd")
 MID=$(jq -r .merchant.id <<<"$REG"); KEY_ID=$(jq -r .apiKey.keyId <<<"$REG"); KEY_SECRET=$(jq -r .apiKey.keySecret <<<"$REG")
 curl -sf -o /dev/null -X POST -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' \
   -d '{"reason":"KYC verified"}' "$GW/api/v1/admin/merchants/$MID/activate"
-replica "$MID" "City Hospital" AUTO
 register "Lakeview Clinic" "Lakeview Clinic LLP" >/dev/null   # left waiting for activation (operations view)
 TOKEN=$(curl -sf -u "$KEY_ID:$KEY_SECRET" -d grant_type=client_credentials "$GW/oauth2/token" | jq -r .access_token)
 AUTH=(-H "Authorization: Bearer $TOKEN")
+source scripts/lib/merchant.sh
+echo "Waiting for payment-service to receive the hospital's settings..."
+wait_until_payable AUTO
 
 pay() { # pay <amount> <patient name> <email> <outcome: SUCCESS|FAILURE|OPEN|CANCEL> -> payment id
   local p id co
@@ -57,9 +52,9 @@ pay 950.00 "Rahul Das" rahul@example.com SUCCESS >/dev/null
 pay 3200.00 "Sana Khan" sana@example.com FAILURE >/dev/null
 pay 7600.00 "Arjun Mehta" arjun@example.com OPEN >/dev/null
 pay 1800.00 "Priya Shah" priya@example.com CANCEL >/dev/null
-replica "$MID" "City Hospital" MANUAL
+set_capture_mode MANUAL && wait_until_payable MANUAL
 pay 15000.00 "Kiran Bose" kiran@example.com SUCCESS >/dev/null   # authorized, waiting for capture
-replica "$MID" "City Hospital" AUTO
+set_capture_mode AUTO && wait_until_payable AUTO
 
 refund() { # refund <paymentId> <amount> <reason>; retries (same key) while the capture event is on its way
   local key; key=$(uuid)
