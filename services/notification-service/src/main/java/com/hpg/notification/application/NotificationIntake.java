@@ -56,8 +56,11 @@ public class NotificationIntake {
     private final MeterRegistry meters;
     private final Clock clock;
 
+    private final SmsProperties sms;
+
     public NotificationIntake(NotificationRepository notifications, ObjectMapper json, MeterRegistry meters,
-            Clock clock) {
+            Clock clock, SmsProperties sms) {
+        this.sms = sms;
         this.notifications = notifications;
         this.json = json;
         this.meters = meters;
@@ -87,7 +90,31 @@ public class NotificationIntake {
                     p.paymentId(), null, event.aggregateVersion(), c.email(), emailSubject(event.eventType(), p),
                     emailBody(event.eventType(), p), clock.instant()));
         }
+        if (sms.enabled() && PATIENT_EMAIL_EVENTS.contains(event.eventType()) && c != null && c.phone() != null
+                && !c.phone().isBlank()) {
+            created += save(new Notification(p.merchantId(), event.eventId(), event.eventType(), Channel.SMS, type,
+                    p.paymentId(), null, event.aggregateVersion(), c.phone(), null, smsText(event.eventType(), p),
+                    clock.instant()));
+        }
         return created;
+    }
+
+    /**
+     * One short message (under 160 characters): amount and the hospital's bill reference only; no names, no
+     * clinical details, no links (links in SMS are a phishing pattern patients are taught to distrust).
+     */
+    static String smsText(String eventType, PaymentEventPayload p) {
+        String amount = p.amount().currency() + " " + p.amount().amount().toPlainString();
+        String ref = p.merchantReference() == null ? "" : p.merchantReference();
+        if (ref.length() > 30) {
+            ref = ref.substring(0, 30);
+        }
+        return switch (eventType) {
+            case "PaymentCaptured" -> "Payment of " + amount + " received for bill " + ref + ". Thank you.";
+            case "PaymentFailed" -> "Payment of " + amount + " for bill " + ref
+                    + " did not go through. No money was taken. Please contact the hospital.";
+            default -> "Payment link for bill " + ref + " (" + amount + ") has expired. Please contact the hospital.";
+        };
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

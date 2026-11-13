@@ -157,8 +157,13 @@ class NotificationFlowIT {
         wiremock.stubFor(WireMock.post(urlEqualTo("/hooks/" + merchantId)).willReturn(aResponse().withStatus(204)));
         UUID paymentId = paymentEvent("PaymentCaptured", "CAPTURED", "asha@example.com");
 
-        List<Notification> created = awaitNotifications(paymentId, 2);
-        assertThat(created).extracting(Notification::getChannel).containsExactlyInAnyOrder(Channel.WEBHOOK, Channel.EMAIL);
+        List<Notification> created = awaitNotifications(paymentId, 3);
+        assertThat(created).extracting(Notification::getChannel)
+                .containsExactlyInAnyOrder(Channel.WEBHOOK, Channel.EMAIL, Channel.SMS);
+        assertThat(created).filteredOn(n -> n.getChannel() == Channel.SMS).singleElement().satisfies(n -> {
+            assertThat(n.getBody()).startsWith("Payment of INR 2000.00 received for bill ").hasSizeLessThan(160);
+            assertThat(n.getBody()).doesNotContain("Asha");
+        });
         dispatchUntilQuiet();
 
         List<LoggedRequest> requests = wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId)));
@@ -181,10 +186,13 @@ class NotificationFlowIT {
         // The patient's address is encrypted at rest.
         assertThat(jdbc.queryForList("SELECT recipient_enc FROM notifications WHERE payment_id = ? AND channel = 'EMAIL'",
                 String.class, paymentId).getFirst()).doesNotContain("asha");
+        // ...and so is the phone number; the local SMS provider only logs a masked number.
+        assertThat(jdbc.queryForList("SELECT recipient_enc FROM notifications WHERE payment_id = ? AND channel = 'SMS'",
+                String.class, paymentId).getFirst()).doesNotContain("9800000000");
 
         mvc.perform(get("/api/v1/notifications").param("paymentId", paymentId.toString()).with(merchant()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content.length()").value(3))
                 .andExpect(jsonPath("$.content[?(@.channel == 'EMAIL')].recipient").value(org.hamcrest.Matchers.hasItem(
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("asha@")))));
     }

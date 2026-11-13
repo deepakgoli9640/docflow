@@ -55,7 +55,7 @@ smtp:
 #                          REFUND_DB_PASSWORD, TRANSACTION_DB_PASSWORD, NOTIFICATION_DB_PASSWORD,
 #                          RECON_DB_PASSWORD, HPG_ENCRYPTION_KEY, HPG_OPS_CLIENT_SECRET,
 #                          HPG_NOTIFICATION_CLIENT_SECRET, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET,
-#                          RAZORPAY_WEBHOOK_SECRET, SMTP_USERNAME, SMTP_PASSWORD, REDIS_PASSWORD
+#                          RAZORPAY_WEBHOOK_SECRET, SMTP_USERNAME, SMTP_PASSWORD, REDIS_PASSWORD, MSG91_AUTH_KEY
 #   <jwtSecret>            keys: private.pem, public.pem (token signing key; every merchant-service replica
 #                          must sign with the same key)
 secrets:
@@ -130,7 +130,7 @@ services:
   notification-service:
     port: 8085
     db: NOTIFICATION
-    secrets: [HPG_ENCRYPTION_KEY, HPG_NOTIFICATION_CLIENT_SECRET, SMTP_USERNAME, SMTP_PASSWORD]
+    secrets: [HPG_ENCRYPTION_KEY, HPG_NOTIFICATION_CLIENT_SECRET, SMTP_USERNAME, SMTP_PASSWORD, MSG91_AUTH_KEY]
   reconciliation-service:
     port: 8086
     db: RECON

@@ -4,5 +4,7 @@ public enum Channel {
     /** Signed HTTP POST to the hospital's webhook URL. */
     WEBHOOK,
     /** Email to the patient. */
-    EMAIL
+    EMAIL,
+    /** Text message to the patient's phone. */
+    SMS
 }

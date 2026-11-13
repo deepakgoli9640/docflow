@@ -50,6 +50,18 @@ public class DeliveryConfig {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public com.hpg.notification.delivery.SmsSender smsSender(com.hpg.notification.application.SmsProperties sms,
+            NotificationProperties properties) {
+        if ("msg91".equalsIgnoreCase(sms.provider())) {
+            return new com.hpg.notification.delivery.Msg91SmsSender(sms.msg91(), properties.connectTimeout(),
+                    properties.requestTimeout());
+        }
+        log.info("SMS provider 'log': patient text messages are logged (number masked), not sent");
+        return new com.hpg.notification.delivery.LoggingSmsSender();
+    }
+
+    @Bean
     public Backoff notificationBackoff(NotificationProperties properties) {
         SecureRandom random = new SecureRandom();
         return new Backoff(properties.dispatch().initialBackoff(), properties.dispatch().maxBackoff(), random::nextDouble);
