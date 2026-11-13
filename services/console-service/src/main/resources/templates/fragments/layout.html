@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en" th:fragment="layout(title, content)" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title th:replace="${title}">Payment Gateway Console</title>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <link rel="icon" href="data:,">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" th:href="@{/}">
+        <span class="brand__mark">HPG</span>
+        <span class="brand__text">Payment Gateway</span>
+    </a>
+    <div class="topbar__right" th:if="${user != null}">
+        <span class="whoami">
+            <span class="whoami__role" th:text="${user.displayName()}">Hospital</span>
+            <span class="whoami__id" th:text="${user.name()}">hpgk_…</span>
+        </span>
+        <form th:action="@{/logout}" method="post" class="inline">
+            <button type="submit" class="button button--quiet">Sign out</button>
+        </form>
+    </div>
+</header>
+
+<div class="shell">
+    <nav class="sidenav" th:if="${user != null}">
+        <th:block th:if="${user.isMerchant()}">
+            <span class="sidenav__label">Hospital</span>
+            <a th:href="@{/payments}" th:classappend="${#strings.startsWith(currentPath, '/payments') ? 'is-active' : ''}">Payments</a>
+            <a th:href="@{/payments/new}">New payment</a>
+            <a th:href="@{/settings}" th:classappend="${#strings.startsWith(currentPath, '/settings') ? 'is-active' : ''}">Settings</a>
+            <a th:href="@{/api-keys}" th:classappend="${#strings.startsWith(currentPath, '/api-keys') ? 'is-active' : ''}">API keys</a>
+        </th:block>
+        <th:block th:if="${user.isOps()}">
+            <span class="sidenav__label">Operations</span>
+            <a th:href="@{/ops/merchants}" th:classappend="${#strings.startsWith(currentPath, '/ops/merchants') ? 'is-active' : ''}">Hospitals</a>
+            <a th:href="@{/ops/notifications}" th:classappend="${#strings.startsWith(currentPath, '/ops/notifications') ? 'is-active' : ''}">Notifications</a>
+        </th:block>
+    </nav>
+
+    <div class="content">
+        <div class="banner banner--ok" th:if="${flashSuccess}" th:text="${flashSuccess}">Saved.</div>
+        <div class="banner banner--bad" th:if="${flashError}" th:text="${flashError}">Something went wrong.</div>
+
+        <!-- A secret the API returns exactly once. Shown here and never retrievable again. -->
+        <div class="reveal" th:if="${revealedSecret}">
+            <div class="reveal__head">
+                <strong th:text="${revealedSecretLabel} ?: 'Secret'">Secret</strong>
+                <span class="reveal__warn">Shown once — copy it now</span>
+            </div>
+            <div class="reveal__body">
+                <code th:text="${revealedSecret}">secret</code>
+                <button type="button" class="button button--small" th:attr="data-copy=${revealedSecret}">Copy</button>
+            </div>
+        </div>
+
+        <main th:replace="${content}">
+            <p>Page content.</p>
+        </main>
+    </div>
+</div>
+
+<footer class="footnote">
+    <span>Amounts are exact decimals. Times are UTC.</span>
+    <span>Local environment — no real money moves.</span>
+</footer>
+<script th:src="@{/js/console.js}" defer></script>
+</body>
+</html>

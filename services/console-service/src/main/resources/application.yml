@@ -1,0 +1,73 @@
+# console-service: the web console and the backend-for-frontend behind it.
+# It owns no database. Every page is built from the public APIs, through the gateway.
+server:
+  port: 8086
+  shutdown: graceful
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true        # the session cookie is not readable from JavaScript
+        same-site: lax         # blocks cross-site form posts while keeping normal navigation working
+        secure: ${HPG_CONSOLE_SECURE_COOKIES:false}   # true behind TLS in any real deployment
+
+spring:
+  application:
+    name: console-service
+  thymeleaf:
+    cache: ${HPG_CONSOLE_TEMPLATE_CACHE:true}
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          max-age: 1h
+  mvc:
+    problemdetails:
+      enabled: false           # this service answers in HTML, not Problem Details
+
+hpg:
+  console:
+    # The console deliberately goes through the edge, so what it shows is what a hospital's own system
+    # would get: same routes, same authentication, same rate limits.
+    gateway-uri: ${HPG_GATEWAY_URI:http://localhost:8080}
+    connect-timeout: 2s
+    read-timeout: 10s
+    live-refresh: 3s
+  security:
+    issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - optional:file:../../deploy/env/.env[.properties]
+      - optional:file:./deploy/env/.env[.properties]
+  thymeleaf:
+    cache: false               # edit a template and reload the page
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+logging:
+  structured:
+    format:
+      console: ecs

@@ -1,0 +1,35 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="notificationsTable">
+    <p class="empty" th:if="${notifications.isEmpty()}">Nothing to show.</p>
+    <div class="table-scroll">
+    <table class="table" th:unless="${notifications.isEmpty()}">
+        <thead>
+        <tr><th>Event</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Attempts</th>
+            <th>Next attempt</th><th>Created</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="n : ${notifications.content}">
+            <td th:text="${n.eventType()}">PaymentCaptured</td>
+            <td th:text="${n.channel()}">WEBHOOK</td>
+            <td>
+                <div th:text="${n.recipientType()}">MERCHANT</div>
+                <div class="muted mono" th:text="${n.recipient()} ?: '—'">—</div>
+            </td>
+            <td><span th:replace="~{fragments/bits :: badge(${n.status()})}"></span></td>
+            <td class="right" th:text="${n.attemptCount()}">0</td>
+            <td th:text="${n.nextAttemptAt() != null ? @fmt.relative(n.nextAttemptAt()) : '—'}">—</td>
+            <td th:text="${@fmt.shortInstant(n.createdAt())}">—</td>
+            <td class="right">
+                <a class="button button--small" th:href="@{/ops/notifications/{id}(id=${n.id()})}">Open</a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    </div>
+    <nav th:replace="~{fragments/bits :: pager(${notifications}, '/ops/notifications',
+        ${(status != null ? 'status=' + status + '&amp;' : '') + (merchantId != null ? 'merchantId=' + merchantId + '&amp;' : '')})}"></nav>
+</div>
+</body>
+</html>

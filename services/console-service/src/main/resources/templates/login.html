@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · Payment Gateway</title>
+    <link rel="stylesheet" th:href="@{/css/console.css}">
+    <link rel="icon" href="data:,">
+</head>
+<body class="centred">
+<main class="card card--narrow">
+    <h1 class="card__title">
+        <span class="brand__mark">HPG</span>
+        Payment Gateway
+    </h1>
+    <p class="muted">Sign in with the credentials the gateway issued.</p>
+
+    <div class="banner banner--bad" th:if="${error}" th:text="${error}">Rejected.</div>
+    <div class="banner banner--ok" th:if="${info}" th:text="${info}">Signed out.</div>
+
+    <form th:action="@{/login}" method="post" class="stack">
+        <label>
+            <span>Client id</span>
+            <input type="text" name="username" autocomplete="username" required autofocus
+                   placeholder="hpgk_… or ops-console">
+        </label>
+        <label>
+            <span>Secret</span>
+            <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="button button--primary">Sign in</button>
+    </form>
+
+    <details class="hint">
+        <summary>What do I type here?</summary>
+        <ul>
+            <li><strong>Hospital staff:</strong> an API key id (<code>hpgk_…</code>) and its secret, from
+                registration or the API keys page.</li>
+            <li><strong>Operations:</strong> the ops client id and secret
+                (<code>HPG_OPS_CLIENT_SECRET</code> in <code>deploy/env/.env</code>).</li>
+        </ul>
+        <p class="muted">
+            Signing in is a real OAuth2 client-credentials exchange against the gateway: if it returns a
+            token, the credentials are valid, and the token says which role you have. The console keeps no
+            user accounts of its own. In a real deployment people would sign in through an identity
+            provider with multi-factor authentication, and API keys would stay in servers.
+        </p>
+    </details>
+</main>
+</body>
+</html>

@@ -8,7 +8,8 @@ Java 21 · Spring Boot 3.5 · Spring Cloud Gateway · Spring Security / Authoriz
 PostgreSQL · Flyway · Kafka (Phase 4) · Redis · Testcontainers · Docker Compose
 
 > **Status: Phase 4 of 8 complete** — gateway, merchant-service, payment-service and
-> notification-service, connected by Kafka through a transactional outbox. The Razorpay adapter is
+> notification-service, connected by Kafka through a transactional outbox, plus a **web console**
+> for hospital staff and operations, built on the same public APIs. The Razorpay adapter is
 > tested against WireMock; it has **not yet run against the real sandbox** (no test keys), and local
 > demos use a clearly labelled simulated provider. Patient SMS is simulated; patient email is real SMTP. See [what is implemented](docs/README.md#implemented-vs-simulated) and the
 > [implementation plan](docs/13-implementation-plan.md).
@@ -31,6 +32,7 @@ platform/messaging/          Transactional outbox writer (Kafka relay in Phase 4
 services/merchant-service/   Hospital onboarding, API keys, configuration, OAuth2 token issuer
 services/payment-service/    Payments, state machine, idempotency, Razorpay adapter, checkout, webhooks, recovery
 services/notification-service/ Hospital webhooks (signed), patient email/SMS, delivery tracking, retries
+services/console-service/    Web console (Thymeleaf): backend-for-frontend over the public APIs — no DB of its own
 deploy/docker-compose.yml    Local environment, split into profiles
 deploy/postgres/init/        One database + one locked-down user per service
 deploy/env/.env.example      Every setting/secret the stack reads (copy via scripts/init-env.sh)
@@ -57,6 +59,7 @@ docs/                        Architecture documentation
 # 3a. Run everything in Docker (~1.5 GB RAM in total; use `clean package`, see note below)
 ./mvnw -DskipTests clean package
 docker compose -f deploy/docker-compose.yml --profile infra --profile core --profile notify up -d --build
+#     add --profile ui for the web console (~250 MB more)
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
 docker compose -f deploy/docker-compose.yml --profile infra up -d
@@ -68,6 +71,7 @@ docker compose -f deploy/docker-compose.yml --profile infra up -d
 ./scripts/smoke-test-phase2.sh    # onboarding, tokens, configuration, suspension
 ./scripts/smoke-test-phase3.sh    # payments, idempotency, checkout, capture, cancel
 ./scripts/smoke-test-phase4.sh    # events: snapshot replication, signed webhook, patient email
+./scripts/smoke-test-console.sh   # the web console: sign-in, roles, CSRF, create + pay a payment
 
 # Stop (add -v to also delete the database volume)
 docker compose -f deploy/docker-compose.yml --profile '*' down
@@ -81,6 +85,7 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | http://localhost:8025 | Mailpit inbox — patient email, as actually sent over SMTP |
 | http://localhost:8085/swagger-ui.html | notification-service (operations API) |
 | http://localhost:8080/checkout/{token} | Hosted checkout page (the `checkoutUrl` of a payment) |
+| http://localhost:8086 | **Web console** — hospital staff and operations ([docs/14](docs/14-console.md)) |
 
 Run a single module's tests: `./mvnw -pl services/merchant-service -am verify` (the `-am` matters: it
 rebuilds the shared `platform/*` modules, which a bare `-pl` would take from your local Maven
@@ -112,3 +117,17 @@ More requests: [samples/http/merchant.http](samples/http/merchant.http),
 `HPG_PAYMENT_PROVIDER=razorpay` and the three `RAZORPAY_*` **test-mode** values, then follow
 [docs/razorpay-sandbox-checklist.md](docs/razorpay-sandbox-checklist.md). If you created your `.env`
 during Phase 2, add the line `HPG_PAYMENT_PROVIDER=simulated` to it (or re-run `init-env.sh --force`).
+
+## Web console
+
+`--profile ui` adds a web UI at **http://localhost:8086** — [docs/14-console.md](docs/14-console.md).
+
+Hospital staff sign in with an **API key id and secret** and get their payments, their configuration
+and their keys; operations sign in with `HPG_OPS_CLIENT_SECRET` (user `ops-console`) and get merchant
+onboarding, lifecycle actions and notification delivery. Both come from `./scripts/init-env.sh` or
+the registration response.
+
+It is a **backend-for-frontend**: it owns no database and no business rules, calls the services
+through the gateway exactly as a hospital's own system would, and never hands the browser an access
+token — the browser gets an `HttpOnly` session cookie and nothing else. Sign-in with a key secret
+typed into a form is a deliberate demo-grade simplification, explained in the doc.

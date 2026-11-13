@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Payments · Payment Gateway</title></head>
+<body>
+<main>
+    <div class="page__head">
+        <h1 class="page__title">Payments</h1>
+        <a class="button button--primary" th:href="@{/payments/new}">New payment</a>
+    </div>
+
+    <form class="filters" method="get" th:action="@{/payments}">
+        <label>
+            <span>Status</span>
+            <select name="status">
+                <option value="">Any</option>
+                <option th:each="s : ${ {'CREATED','PENDING','PROCESSING','AUTHORIZED','CAPTURED','FAILED','CANCELLED','EXPIRED','UNKNOWN'} }"
+                        th:value="${s}" th:text="${s}" th:selected="${s == status}">STATUS</option>
+            </select>
+        </label>
+        <label>
+            <span>Bill reference</span>
+            <input type="text" name="merchantReference" th:value="${merchantReference}" placeholder="BILL-2026-000981">
+        </label>
+        <button type="submit" class="button">Filter</button>
+        <a class="button button--quiet" th:href="@{/payments}">Clear</a>
+    </form>
+
+    <!-- Refreshes itself only while something can still change on its own: a patient paying on their
+         phone moves a payment from PENDING to CAPTURED with nobody touching this page. -->
+    <div th:attr="data-live-url=@{/payments/table(status=${status},merchantReference=${merchantReference},page=${page})},
+                  data-live-seconds=${liveRefreshSeconds},
+                  data-live-active=${payments.content.?[inFlight()].size() > 0}">
+        <div th:replace="~{payments/fragments :: paymentsTable}"></div>
+    </div>
+</main>
+</body>
+</html>

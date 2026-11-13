@@ -5,6 +5,7 @@
 #   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d  # + gateway, merchant, payment
 #
 #   docker compose -f deploy/docker-compose.yml --profile infra --profile core --profile notify up -d
+#   docker compose -f deploy/docker-compose.yml --profile infra --profile core --profile ui up -d     # + console
 #
 # Prerequisites:  ./scripts/init-env.sh   and   ./mvnw -DskipTests package
 # Observability (Prometheus/Grafana/Jaeger) arrives in Phase 7.
@@ -179,6 +180,32 @@ services:
       start_period: 60s
       retries: 10
     mem_limit: 512m
+
+  console-service:
+    # The web console for hospital staff and operations. It holds no database and no credentials of its
+    # own: whoever signs in provides them, and they stay in the server-side session.
+    profiles: [ui]
+    build: ../services/console-service
+    image: hpg/console-service:local
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      # The console is a client of the edge, exactly like a hospital's own system. It reaches the gateway
+      # by container name, but the links it renders (checkout URLs) must work in your browser.
+      HPG_GATEWAY_URI: http://api-gateway:8080
+      HPG_TOKEN_ISSUER: http://merchant-service:8081
+    ports:
+      - "127.0.0.1:8086:8086"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 45s
+      retries: 10
+    mem_limit: 384m
 
   api-gateway:
     profiles: [core]

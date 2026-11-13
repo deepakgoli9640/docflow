@@ -1,0 +1,161 @@
+<!--
+  Fragment names must not collide with HTML element names: a selector such as ":: table" also
+  matches <table> elements, which silently pulls in the wrong part of the file.
+-->
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<div th:fragment="paymentsTable">
+    <p class="empty" th:if="${payments.isEmpty()}">
+        No payments yet. <a th:href="@{/payments/new}">Create one</a> to see the flow end to end.
+    </p>
+    <div class="table-scroll">
+    <table class="table" th:unless="${payments.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Bill reference</th>
+            <th class="right">Amount</th>
+            <th>Status</th>
+            <th>Capture</th>
+            <th>Created</th>
+            <th>Expires</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="p : ${payments.content}">
+            <td><a th:href="@{/payments/{id}(id=${p.id})}" th:text="${p.merchantReference}">BILL-1</a></td>
+            <td class="right mono" th:text="${p.amount.formatted()}">INR 0.00</td>
+            <td>
+                <span th:replace="~{fragments/bits :: badge(${p.status})}"></span>
+                <span class="flag" th:if="${p.lateCapture}" title="Captured after we had given up on it">late</span>
+            </td>
+            <td th:text="${p.captureMode}">AUTO</td>
+            <td th:text="${@fmt.shortInstant(p.createdAt)}">—</td>
+            <td th:text="${p.inFlight() ? @fmt.relative(p.expiresAt) : '—'}">—</td>
+            <td class="right">
+                <button type="button" class="button button--small" th:if="${p.checkoutUrl != null}"
+                        th:attr="data-copy=${p.checkoutUrl}">Copy link</button>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    </div>
+    <nav th:replace="~{fragments/bits :: pager(${payments}, '/payments',
+        ${(status != null ? 'status=' + status + '&amp;' : '') + (merchantReference != null ? 'merchantReference=' + merchantReference + '&amp;' : '')})}"></nav>
+</div>
+
+<div th:fragment="paymentPanel">
+    <div class="grid">
+        <div class="card">
+            <h2 class="card__title">Payment</h2>
+            <dl class="pairs">
+                <dt>Status</dt>
+                <dd>
+                    <span th:replace="~{fragments/bits :: badge(${payment.status})}"></span>
+                    <span class="flag" th:if="${payment.lateCapture}">late capture</span>
+                </dd>
+                <dt>Amount</dt>
+                <dd class="mono" th:text="${payment.amount.formatted()}">INR 0.00</dd>
+                <dt>Bill reference</dt>
+                <dd th:text="${payment.merchantReference}">BILL-1</dd>
+                <dt>Description</dt>
+                <dd th:text="${payment.description} ?: '—'">—</dd>
+                <dt>Capture mode</dt>
+                <dd th:text="${payment.captureMode}">AUTO</dd>
+                <dt>Created</dt>
+                <dd th:text="${@fmt.instant(payment.createdAt)}">—</dd>
+                <dt>Expires</dt>
+                <dd>
+                    <span th:text="${@fmt.instant(payment.expiresAt)}">—</span>
+                    <span class="muted" th:if="${payment.inFlight()}" th:text="'(' + ${@fmt.relative(payment.expiresAt)} + ')'"></span>
+                </dd>
+                <dt>Authorized</dt>
+                <dd th:text="${@fmt.instant(payment.authorizedAt)}">—</dd>
+                <dt>Captured</dt>
+                <dd th:text="${@fmt.instant(payment.capturedAt)}">—</dd>
+                <dt th:if="${payment.failureCode != null}">Failure</dt>
+                <dd th:if="${payment.failureCode != null}">
+                    <code th:text="${payment.failureCode}">CODE</code>
+                    <span th:text="${payment.failureReason}">reason</span>
+                </dd>
+            </dl>
+        </div>
+
+        <div class="card">
+            <h2 class="card__title">Patient</h2>
+            <dl class="pairs" th:if="${payment.customer != null}">
+                <dt>Name</dt>
+                <dd th:text="${payment.customer.name()} ?: '—'">—</dd>
+                <dt>Email</dt>
+                <dd th:text="${payment.customer.email()} ?: '—'">—</dd>
+                <dt>Phone</dt>
+                <dd th:text="${payment.customer.phone()} ?: '—'">—</dd>
+            </dl>
+            <p class="muted" th:if="${payment.customer != null}">
+                Contact details are masked by the API. The gateway holds them encrypted and uses them only
+                to prefill checkout and send receipts.
+            </p>
+            <p class="muted" th:if="${payment.customer == null}">No patient details were supplied.</p>
+
+            <th:block th:if="${payment.checkoutUrl != null}">
+                <h3 class="card__subtitle">Checkout link</h3>
+                <div class="reveal__body">
+                    <code th:text="${payment.checkoutUrl}">link</code>
+                    <button type="button" class="button button--small" th:attr="data-copy=${payment.checkoutUrl}">Copy</button>
+                </div>
+                <p class="muted">Send this to the patient. It stops working when the payment expires.</p>
+            </th:block>
+        </div>
+    </div>
+
+    <div class="card" th:if="${payment.attempts != null and !payment.attempts.isEmpty()}">
+        <h2 class="card__title">Attempts at the provider</h2>
+        <div class="table-scroll">
+        <table class="table">
+            <thead>
+            <tr><th>Provider payment</th><th>Method</th><th>Status</th><th>Error</th><th>When</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="a : ${payment.attempts}">
+                <td class="mono" th:text="${a.providerPaymentId()}">pay_…</td>
+                <td th:text="${a.method()} ?: '—'">—</td>
+                <td>
+                    <span th:replace="~{fragments/bits :: badge(${a.status()})}"></span>
+                    <span class="flag flag--bad" th:if="${a.duplicateCapture()}"
+                          title="A second capture on the same payment: the patient was charged twice">duplicate</span>
+                </td>
+                <td>
+                    <span th:if="${a.errorCode() != null}"><code th:text="${a.errorCode()}">CODE</code>
+                        <span th:text="${a.errorDescription()}">why</span></span>
+                    <span th:unless="${a.errorCode() != null}">—</span>
+                </td>
+                <td th:text="${@fmt.instant(a.createdAt())}">—</td>
+            </tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <div class="card" th:if="${payment.statusHistory != null and !payment.statusHistory.isEmpty()}">
+        <h2 class="card__title">How it got here</h2>
+        <ol class="timeline">
+            <li th:each="h : ${payment.statusHistory}">
+                <span th:replace="~{fragments/bits :: badge(${h.to()})}"></span>
+                <span class="timeline__from" th:if="${h.from() != null}" th:text="'from ' + ${h.from()}">from</span>
+                <span class="timeline__source" th:text="${h.source()}">SOURCE</span>
+                <span class="timeline__reason" th:if="${h.reason() != null}" th:text="${h.reason()}">reason</span>
+                <time th:text="${@fmt.instant(h.at())}">—</time>
+            </li>
+        </ol>
+        <p class="muted">
+            Recorded by payment-service, append-only. <code>CHECKOUT_CALLBACK</code> is the patient's
+            browser, <code>PROVIDER_WEBHOOK</code> the provider calling us, <code>PROVIDER_POLL</code> us
+            asking the provider — the three independent signals that agree on what happened.
+        </p>
+    </div>
+</div>
+
+</body>
+</html>

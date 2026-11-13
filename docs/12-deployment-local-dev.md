@@ -32,6 +32,7 @@ startup and less memory — fine locally, not for load tests or production.)
 | `refund` | refund-service |
 | `ledger` | ledger-service |
 | `notify` | notification-service, mailpit (real SMTP + inbox at http://localhost:8025) |
+| `ui` | console-service — the web console at http://localhost:8086 ([14](14-console.md)) |
 | `recon` | reconciliation-service |
 | `obs` | prometheus, grafana, jaeger |
 | `tools` | kafka-ui (optional, ~250 MB) |
@@ -49,6 +50,10 @@ hpg --profile infra --profile core up -d --build
 # Add notifications (notification-service + Mailpit)
 hpg --profile infra --profile core --profile notify up -d --build
 
+# Add the web console (it only needs the gateway, so `notify` is optional)
+hpg --profile infra --profile core --profile ui up -d --build
+./scripts/smoke-test-console.sh
+
 # Later phases add: --profile refund --profile ledger --profile recon --profile obs
 
 # Stop everything, keep data / wipe data
@@ -59,7 +64,9 @@ hpg --profile "*" down -v
 Measured in Phase 4 (`docker stats`, idle after the smoke tests), `infra` + `core` + `notify`:
 kafka 362 MiB, notification-service 279 MiB, payment-service 267 MiB, merchant-service 261 MiB,
 api-gateway 204 MiB, postgres 102 MiB, mailpit 21 MiB, redis 5 MiB — about **1.5 GB** in total.
-Leave out `--profile notify` and it is about 1.2 GB.
+Leave out `--profile notify` and it is about 1.2 GB. Adding `--profile ui` costs about 250 MiB
+(console-service, `mem_limit: 384m`), so `infra` + `core` + `notify` + `ui` is about **1.75 GB** —
+the full set used while building Phase 4's console.
 
 **Use `clean package`, not `package`.** When only a shared module (`platform/*`) changes, Maven leaves
 the services' existing fat jars in place, and the Docker image then ships a stale copy of the shared
@@ -91,6 +98,11 @@ off on a small laptop.
 | `test` | Testcontainers / WireMock |
 | `prod` | Example production settings: Swagger off, https-only webhooks, strict CORS |
 | `provider-sim` | Opt-in simulated provider for demos without Razorpay keys |
+
+The console reads three settings of its own: `HPG_GATEWAY_URI` (the edge it calls — `api-gateway:8080`
+inside Compose), `HPG_TOKEN_ISSUER` (must equal the `iss` claim merchant-service puts in tokens, or
+token verification fails) and `HPG_CONSOLE_SECURE_COOKIES`, which must be `true` behind TLS. It stores
+nothing and has no database user.
 
 Secrets come only from environment variables (`deploy/env/.env`, git-ignored; `.env.example`
 committed with placeholders): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,

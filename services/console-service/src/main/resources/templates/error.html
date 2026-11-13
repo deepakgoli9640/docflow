@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Problem · Payment Gateway</title></head>
+<body>
+<main>
+    <h1 class="page__title">That did not work</h1>
+    <div th:replace="~{fragments/bits :: problem(${problem})}"></div>
+    <p th:if="${problem == null}" class="muted">
+        Something went wrong rendering this page. The logs will have the detail, keyed by the correlation
+        id of your request.
+    </p>
+    <p><a class="button button--quiet" th:href="@{/}">Back to the start</a></p>
+</main>
+</body>
+</html>

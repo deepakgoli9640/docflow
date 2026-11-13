@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Payment · Payment Gateway</title></head>
+<body>
+<main>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title" th:text="${payment.merchantReference}">BILL-1</h1>
+            <p class="muted mono" th:text="${payment.id}">id</p>
+        </div>
+        <div class="actions">
+            <form th:action="@{/payments/{id}/capture(id=${payment.id})}" method="post" class="inline"
+                  th:if="${payment.capturable()}" data-confirm="Capture this payment now?">
+                <button type="submit" class="button button--primary">Capture</button>
+            </form>
+            <form th:action="@{/payments/{id}/cancel(id=${payment.id})}" method="post" class="inline"
+                  th:if="${payment.cancellable()}" data-confirm="Cancel this payment? The patient will not be able to pay.">
+                <input type="hidden" name="reason" value="Cancelled from the console">
+                <button type="submit" class="button">Cancel</button>
+            </form>
+            <a class="button button--quiet" th:href="@{/payments}">All payments</a>
+        </div>
+    </div>
+
+    <p class="note" th:if="${payment.status == 'AUTHORIZED'}">
+        The money is held but not taken. Capture it once the hospital is ready; if nobody captures it, the
+        provider releases it.
+    </p>
+    <p class="note" th:if="${payment.status == 'UNKNOWN'}">
+        A capture was sent but the provider did not answer in time, so the outcome is genuinely unknown.
+        It is being verified automatically — do not capture again.
+    </p>
+
+    <div th:attr="data-live-url=@{/payments/{id}/panel(id=${payment.id})},
+                  data-live-seconds=${liveRefreshSeconds},
+                  data-live-active=${payment.inFlight()}">
+        <div th:replace="~{payments/fragments :: paymentPanel}"></div>
+    </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>New payment · Payment Gateway</title></head>
+<body>
+<main>
+    <h1 class="page__title">New payment</h1>
+    <p class="muted">
+        The amount is the patient's share, after the insurer has settled its part. This gateway does not
+        see the bill or the claim — only what the patient owes.
+    </p>
+
+    <div th:replace="~{fragments/bits :: problem(${problem})}"></div>
+
+    <form th:action="@{/payments}" method="post" th:object="${form}" class="card stack">
+        <label>
+            <span>Bill reference *</span>
+            <input type="text" th:field="*{merchantReference}" required maxlength="64"
+                   placeholder="BILL-2026-000981">
+            <small>Your own reference. Only one live payment is allowed per reference.</small>
+            <em class="field-error" th:if="${#fields.hasErrors('merchantReference')}"
+                th:errors="*{merchantReference}">error</em>
+        </label>
+
+        <label>
+            <span>Amount (INR) *</span>
+            <input type="number" th:field="*{amount}" step="0.01" min="0.01" required placeholder="20000.00">
+            <small>Exact decimals, at most two places.</small>
+            <em class="field-error" th:if="${#fields.hasErrors('amount')}" th:errors="*{amount}">error</em>
+        </label>
+
+        <label>
+            <span>Description</span>
+            <input type="text" th:field="*{description}" maxlength="255"
+                   placeholder="Patient share for bill BILL-2026-000981">
+        </label>
+
+        <fieldset class="fieldset">
+            <legend>Patient (optional)</legend>
+            <p class="muted">Used to prefill checkout and to send a receipt. Nothing clinical, ever.</p>
+            <label>
+                <span>Name</span>
+                <input type="text" th:field="*{customerName}" maxlength="100">
+            </label>
+            <label>
+                <span>Email</span>
+                <input type="email" th:field="*{customerEmail}" maxlength="254" placeholder="patient@example.com">
+            </label>
+            <label>
+                <span>Phone</span>
+                <input type="tel" th:field="*{customerPhone}" maxlength="20" placeholder="+919800001234">
+            </label>
+        </fieldset>
+
+        <label>
+            <span>Expires in (minutes)</span>
+            <input type="number" th:field="*{expiresInMinutes}" min="1" max="1440" placeholder="60">
+            <small>Blank uses your configured default. Cannot exceed it.</small>
+        </label>
+
+        <div class="actions">
+            <button type="submit" class="button button--primary">Create payment</button>
+            <a class="button button--quiet" th:href="@{/payments}">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

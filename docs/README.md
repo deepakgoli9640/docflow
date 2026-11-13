@@ -1,7 +1,7 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
 > Status: **Phase 4 complete** (Kafka, transactional outbox relay, merchant replication,
-> notification-service). Phases 5–8 are still design. The table at the bottom says exactly what runs today.
+> notification-service), plus a web console over the same public APIs. Phases 5–8 are still design. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
 > before code relies on it.
@@ -34,6 +34,7 @@ contact details.
 | 11 | [Failure scenarios](11-failure-scenarios.md) | The 10 required failure scenarios and how each is handled and tested |
 | 12 | [Deployment & local dev](12-deployment-local-dev.md) | Docker Compose profiles for an 8 GB laptop, CI/CD |
 | 13 | [Implementation plan](13-implementation-plan.md) | Phases 2–8, deliverables, exit criteria |
+| 14 | [Web console](14-console.md) | The hospital / operations UI: backend-for-frontend, sign-in, pages, limits |
 | — | [Decision log](decisions.md) | Every significant decision, the alternatives, and why |
 | — | [Event catalogue](events/README.md) | Every Kafka event, with examples captured from the running system |
 | — | [Razorpay sandbox checklist](razorpay-sandbox-checklist.md) | What still has to be verified against the real Razorpay sandbox |
@@ -79,4 +80,8 @@ designed but not built.
 | Patient email | **Real (SMTP)** | Mailpit locally — a real SMTP server with a web inbox |
 | Patient SMS | **Simulated** | `LoggingSmsSender`: logs, never sends; says SIMULATED at startup and per message |
 | `NotificationFailed` events for alerting | **Real** | Published through the outbox when a notification is given up on |
+| Web console (hospital: payments, settings, API keys; operations: hospitals, notification delivery) | **Real** | A backend-for-frontend over the public APIs, through the gateway ([14](14-console.md)) |
+| Console security: tokens never reach the browser, `HttpOnly` session cookie, CSRF, session fixation, strict CSP | **Real** | Asserted by `ConsoleIT` and `scripts/smoke-test-console.sh` |
+| Console sign-in from an API key id and secret (or the ops client credentials) | **Real, demo-grade** | Deliberately not how a product would do it; real deployments use an identity provider with MFA ([14 §3](14-console.md)) |
+| Console pages for refunds, ledger, reconciliation; a dashboard; multi-instance sessions | **Not yet** | They follow the services ([14 §7](14-console.md)) |
 | Refunds, ledger, reconciliation | **Not yet** | Phases 5–6 |

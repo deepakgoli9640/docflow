@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>API keys · Payment Gateway</title></head>
+<body>
+<main>
+    <div class="page__head">
+        <h1 class="page__title">API keys</h1>
+        <form th:action="@{/api-keys}" method="post" class="inline">
+            <button type="submit" class="button button--primary">Create key</button>
+        </form>
+    </div>
+
+    <p class="muted">
+        These are what your servers use to call the gateway. A key's secret is hashed and stored, never
+        kept in the clear, so it can only be shown at the moment it is created. You may hold two active
+        keys at once, which is what makes rotation possible without downtime: create the second, deploy
+        it, then revoke the first.
+    </p>
+
+    <p class="empty" th:if="${keys.isEmpty()}">No keys yet.</p>
+    <div class="table-scroll">
+    <table class="table" th:unless="${keys.isEmpty()}">
+        <thead>
+        <tr><th>Key id</th><th>Status</th><th>Created</th><th>Last used</th><th>Revoked</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="k : ${keys}">
+            <td class="mono" th:text="${k.keyId()}">hpgk_…</td>
+            <td><span th:replace="~{fragments/bits :: badge(${k.status()})}"></span></td>
+            <td th:text="${@fmt.instant(k.createdAt())}">—</td>
+            <td th:text="${k.lastUsedAt() != null ? @fmt.relative(k.lastUsedAt()) : 'never'}">never</td>
+            <td th:text="${@fmt.instant(k.revokedAt())}">—</td>
+            <td class="right">
+                <form th:action="@{/api-keys/{id}/revoke(id=${k.keyId()})}" method="post" class="inline"
+                      th:if="${k.active()}"
+                      data-confirm="Revoke this key? Anything using it stops working immediately.">
+                    <button type="submit" class="button button--small button--danger">Revoke</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    </div>
+</main>
+</body>
+</html>

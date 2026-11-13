@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Hospitals · Payment Gateway</title></head>
+<body>
+<main>
+    <h1 class="page__title">Hospitals</h1>
+
+    <form class="filters" method="get" th:action="@{/ops/merchants}">
+        <label>
+            <span>Status</span>
+            <select name="status">
+                <option value="">Any</option>
+                <option th:each="s : ${statuses}" th:value="${s}" th:text="${s}" th:selected="${s == status}">S</option>
+            </select>
+        </label>
+        <button type="submit" class="button">Filter</button>
+        <a class="button button--quiet" th:href="@{/ops/merchants}">Clear</a>
+    </form>
+
+    <p class="empty" th:if="${merchants.isEmpty()}">No hospitals match.</p>
+    <div class="table-scroll">
+    <table class="table" th:unless="${merchants.isEmpty()}">
+        <thead>
+        <tr><th>Hospital</th><th>Contact</th><th>Status</th><th>Registered</th><th></th></tr>
+        </thead>
+        <tbody>
+        <tr th:each="m : ${merchants.content}">
+            <td>
+                <a th:href="@{/ops/merchants/{id}(id=${m.id})}" th:text="${m.displayName}">Hospital</a>
+                <div class="muted" th:text="${m.legalName}">Legal name</div>
+            </td>
+            <td th:text="${m.contactEmail}">—</td>
+            <td><span th:replace="~{fragments/bits :: badge(${m.status})}"></span></td>
+            <td th:text="${@fmt.shortInstant(m.createdAt)}">—</td>
+            <td class="right"><a class="button button--small" th:href="@{/ops/merchants/{id}(id=${m.id})}">Review</a></td>
+        </tr>
+        </tbody>
+    </table>
+    </div>
+    <nav th:replace="~{fragments/bits :: pager(${merchants}, '/ops/merchants',
+        ${status != null ? 'status=' + status + '&amp;' : ''})}"></nav>
+</main>
+</body>
+</html>

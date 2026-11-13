@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Settings · Payment Gateway</title></head>
+<body>
+<main>
+    <h1 class="page__title">Settings</h1>
+
+    <div class="grid">
+        <div class="card">
+            <h2 class="card__title">Hospital</h2>
+            <dl class="pairs">
+                <dt>Status</dt>
+                <dd><span th:replace="~{fragments/bits :: badge(${merchant.status})}"></span></dd>
+                <dt>Legal name</dt>
+                <dd th:text="${merchant.legalName}">—</dd>
+                <dt>Contact email</dt>
+                <dd th:text="${merchant.contactEmail}">—</dd>
+                <dt>Registered</dt>
+                <dd th:text="${@fmt.instant(merchant.createdAt)}">—</dd>
+            </dl>
+            <p class="note" th:if="${merchant.status == 'PENDING_ACTIVATION'}">
+                You can configure the account now, but payments are refused until operations activate it.
+            </p>
+            <p class="muted">
+                Legal name and contact email are tied to onboarding checks and are changed by operations,
+                not here.
+            </p>
+
+            <form th:action="@{/settings/profile}" method="post" class="stack">
+                <label>
+                    <span>Display name</span>
+                    <input type="text" name="displayName" th:value="${merchant.displayName}" maxlength="100">
+                    <small>What patients see on the checkout page and in receipts.</small>
+                </label>
+                <label>
+                    <span>Contact phone</span>
+                    <input type="tel" name="contactPhone" th:value="${merchant.contactPhone}" maxlength="20">
+                </label>
+                <button type="submit" class="button">Save profile</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2 class="card__title">Webhooks</h2>
+            <dl class="pairs">
+                <dt>Endpoint</dt>
+                <dd class="mono" th:text="${configuration.webhookUrl} ?: 'not configured'">—</dd>
+                <dt>Signing secret</dt>
+                <dd th:text="${configuration.webhookSecretConfigured} ? 'configured' : 'missing'">—</dd>
+            </dl>
+            <p class="muted">
+                Every callback is signed <code>HMAC-SHA256</code> over
+                <code>&lt;timestamp&gt;.&lt;body&gt;</code> with this secret, and carries an event id to
+                deduplicate on and a sequence number to discard stale updates. Verify it over the raw body.
+            </p>
+            <form th:action="@{/settings/webhook-secret/rotate}" method="post"
+                  data-confirm="Rotate the signing secret? Callbacks will be signed with the new one within five minutes.">
+                <button type="submit" class="button">Rotate signing secret</button>
+            </form>
+        </div>
+    </div>
+
+    <form th:action="@{/settings/configuration}" method="post" class="card stack">
+        <h2 class="card__title">Payment configuration</h2>
+        <p class="muted">
+            Saved in full, and replicated to the other services within a few seconds. Values above the
+            platform maximum are refused with the limit that applies.
+        </p>
+
+        <fieldset class="fieldset">
+            <legend>Payment methods</legend>
+            <label class="check" th:each="m : ${ {'CARD','UPI','NETBANKING','WALLET'} }">
+                <input type="checkbox" name="enabledMethods" th:value="${m}" th:checked="${configuration.accepts(m)}">
+                <span th:text="${m}">METHOD</span>
+            </label>
+        </fieldset>
+
+        <label>
+            <span>Capture mode</span>
+            <select name="captureMode">
+                <option value="AUTO" th:selected="${configuration.captureMode == 'AUTO'}">AUTO — take the money as soon as the patient pays</option>
+                <option value="MANUAL" th:selected="${configuration.captureMode == 'MANUAL'}">MANUAL — hold it until the hospital captures</option>
+            </select>
+        </label>
+
+        <div class="row">
+            <label>
+                <span>Minimum amount</span>
+                <input type="number" name="minAmount" step="0.01" min="0.01" required
+                       th:value="${configuration.minAmount.amount()}">
+            </label>
+            <label>
+                <span>Maximum per payment</span>
+                <input type="number" name="maxAmountPerTransaction" step="0.01" min="0.01" required
+                       th:value="${configuration.maxAmountPerTransaction.amount()}">
+            </label>
+            <label>
+                <span>Daily limit</span>
+                <input type="number" name="dailyLimit" step="0.01" min="0.01" required
+                       th:value="${configuration.dailyLimit.amount()}">
+            </label>
+        </div>
+
+        <div class="row">
+            <label>
+                <span>Payment lifetime (minutes)</span>
+                <input type="number" name="paymentTtlMinutes" min="1" required
+                       th:value="${configuration.paymentTtlMinutes}">
+            </label>
+            <label>
+                <span>Attempts per payment</span>
+                <input type="number" name="maxAttempts" min="1" required th:value="${configuration.maxAttempts}">
+                <small>How many times a patient may retry before the payment fails.</small>
+            </label>
+            <label>
+                <span>Refund window (days)</span>
+                <input type="number" name="refundWindowDays" min="1" required
+                       th:value="${configuration.refundWindowDays}">
+            </label>
+        </div>
+
+        <label>
+            <span>Webhook URL</span>
+            <input type="url" name="webhookUrl" th:value="${configuration.webhookUrl}"
+                   placeholder="https://his.cityhospital.example/hpg/webhooks">
+            <small>Must be https and must not resolve to a private address.</small>
+        </label>
+
+        <fieldset class="fieldset">
+            <legend>Patient notifications</legend>
+            <label class="check">
+                <input type="checkbox" name="notifyPatientEmail" th:checked="${configuration.notifyPatientEmail}">
+                <span>Email the patient a receipt</span>
+            </label>
+            <label class="check">
+                <input type="checkbox" name="notifyPatientSms" th:checked="${configuration.notifyPatientSms}">
+                <span>Text the patient a confirmation <em>(simulated in this environment)</em></span>
+            </label>
+        </fieldset>
+
+        <div class="actions">
+            <button type="submit" class="button button--primary">Save configuration</button>
+            <a class="button button--quiet" th:href="@{/settings}">Discard</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

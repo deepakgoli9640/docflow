@@ -1,0 +1,34 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!-- A status, coloured by what it means rather than by where it appears. -->
+<span th:fragment="badge(status)" class="badge"
+      th:classappend="'badge--' + ${@fmt.slug(status)}" th:text="${status}">STATUS</span>
+
+<!-- Page links. Kept to previous/next: offset paging deeper than that is rarely what anyone wants. -->
+<nav th:fragment="pager(pageView, baseUrl, query)" class="pager" th:if="${pageView.page != null}">
+    <a class="button button--quiet" th:if="${pageView.hasPrevious()}"
+       th:href="${baseUrl + '?' + query + 'page=' + pageView.previousPage()}">Previous</a>
+    <span class="pager__state">
+        Page <span th:text="${pageView.page.number() + 1}">1</span>
+        of <span th:text="${pageView.page.totalPages() == 0 ? 1 : pageView.page.totalPages()}">1</span>
+        · <span th:text="${pageView.page.totalElements()}">0</span> in total
+    </span>
+    <a class="button button--quiet" th:if="${pageView.hasNext()}"
+       th:href="${baseUrl + '?' + query + 'page=' + pageView.nextPage()}">Next</a>
+</nav>
+
+<!-- What an API said when it refused. The service's own words, not ours. -->
+<div th:fragment="problem(problem)" class="banner banner--bad" th:if="${problem != null}">
+    <strong th:text="${problem.errorCode()}">ERROR_CODE</strong>
+    <span th:text="${problem.detail()}">What went wrong.</span>
+    <ul th:if="${problem.violations() != null and !problem.violations().isEmpty()}">
+        <li th:each="v : ${problem.violations()}">
+            <code th:text="${v.field()}">field</code> <span th:text="${v.message()}">message</span>
+        </li>
+    </ul>
+</div>
+
+</body>
+</html>

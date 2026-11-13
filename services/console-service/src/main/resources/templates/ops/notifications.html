@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Notifications · Payment Gateway</title></head>
+<body>
+<main>
+    <h1 class="page__title">Notification delivery</h1>
+    <p class="muted">
+        What we told hospitals and patients, and how it went. A hospital endpoint that keeps failing is
+        retried for about a day, then marked <code>DEAD</code> — at which point someone has to look.
+    </p>
+
+    <form class="filters" method="get" th:action="@{/ops/notifications}">
+        <label>
+            <span>Status</span>
+            <select name="status">
+                <option value="">Any</option>
+                <option th:each="s : ${statuses}" th:value="${s}" th:text="${s}" th:selected="${s == status}">S</option>
+            </select>
+        </label>
+        <label>
+            <span>Hospital id</span>
+            <input type="text" name="merchantId" th:value="${merchantId}" placeholder="uuid">
+        </label>
+        <button type="submit" class="button">Filter</button>
+        <a class="button button--quiet" th:href="@{/ops/notifications}">Clear</a>
+    </form>
+
+    <div th:attr="data-live-url=@{/ops/notifications/table(status=${status},merchantId=${merchantId},page=${page})},
+                  data-live-seconds=${liveRefreshSeconds},
+                  data-live-active=${notifications.content.?[inFlight()].size() > 0}">
+        <div th:replace="~{ops/notification-fragments :: notificationsTable}"></div>
+    </div>
+</main>
+</body>
+</html>

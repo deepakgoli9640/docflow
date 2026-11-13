@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Hospital · Payment Gateway</title></head>
+<body>
+<main>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title" th:text="${merchant.displayName}">Hospital</h1>
+            <p class="muted mono" th:text="${merchant.id}">id</p>
+        </div>
+        <a class="button button--quiet" th:href="@{/ops/merchants}">All hospitals</a>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2 class="card__title">Registration</h2>
+            <dl class="pairs">
+                <dt>Status</dt>
+                <dd>
+                    <span th:replace="~{fragments/bits :: badge(${merchant.status})}"></span>
+                    <div class="muted" th:if="${merchant.statusReason != null}" th:text="${merchant.statusReason}">why</div>
+                </dd>
+                <dt>Legal name</dt>
+                <dd th:text="${merchant.legalName}">—</dd>
+                <dt>Contact</dt>
+                <dd>
+                    <div th:text="${merchant.contactEmail}">—</div>
+                    <div th:text="${merchant.contactPhone} ?: '—'">—</div>
+                </dd>
+                <dt>Registered</dt>
+                <dd th:text="${@fmt.instant(merchant.createdAt)}">—</dd>
+                <dt>Last change</dt>
+                <dd th:text="${@fmt.instant(merchant.updatedAt)}">—</dd>
+            </dl>
+        </div>
+
+        <div class="card">
+            <h2 class="card__title">Lifecycle</h2>
+            <p class="muted">
+                Every change needs a reason: it goes into this hospital's audit log, which is append-only.
+            </p>
+
+            <form th:action="@{/ops/merchants/{id}/activate(id=${merchant.id})}" method="post" class="stack"
+                  th:if="${merchant.canActivate()}">
+                <label>
+                    <span>Reason</span>
+                    <input type="text" name="reason" required maxlength="500"
+                           placeholder="KYC documents verified">
+                </label>
+                <button type="submit" class="button button--primary">Activate</button>
+            </form>
+
+            <form th:action="@{/ops/merchants/{id}/suspend(id=${merchant.id})}" method="post" class="stack"
+                  th:if="${merchant.canSuspend()}"
+                  data-confirm="Suspend this hospital? It will stop being able to take payments.">
+                <label>
+                    <span>Reason</span>
+                    <input type="text" name="reason" required maxlength="500"
+                           placeholder="Chargeback investigation">
+                </label>
+                <button type="submit" class="button">Suspend</button>
+                <small>
+                    New tokens are refused at once, and the gateway starts refusing the ones already issued
+                    within seconds — it does not wait for them to expire.
+                </small>
+            </form>
+
+            <form th:action="@{/ops/merchants/{id}/deactivate(id=${merchant.id})}" method="post" class="stack"
+                  th:if="${merchant.canDeactivate()}"
+                  data-confirm="Deactivate permanently? This cannot be undone.">
+                <label>
+                    <span>Reason</span>
+                    <input type="text" name="reason" required maxlength="500" placeholder="Contract ended">
+                </label>
+                <button type="submit" class="button button--danger">Deactivate permanently</button>
+            </form>
+
+            <p class="muted" th:if="${merchant.status == 'DEACTIVATED'}">
+                This hospital is deactivated. Nothing further can be done with it.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card__title">Notifications for this hospital</h2>
+        <p><a class="button" th:href="@{/ops/notifications(merchantId=${merchant.id})}">See delivery history</a></p>
+    </div>
+</main>
+</body>
+</html>

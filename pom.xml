@@ -29,6 +29,7 @@
         <module>services/merchant-service</module>
         <module>services/payment-service</module>
         <module>services/notification-service</module>
+        <module>services/console-service</module>
         
         <module>services/api-gateway</module>
     </modules>

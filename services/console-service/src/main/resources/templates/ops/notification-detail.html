@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en" th:replace="~{fragments/layout :: layout(~{::title}, ~{::main})}" xmlns:th="http://www.thymeleaf.org">
+<head><title>Notification · Payment Gateway</title></head>
+<body>
+<main>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title" th:text="${details.notification().eventType() + ' → ' + details.notification().channel()}">
+                Notification</h1>
+            <p class="muted mono" th:text="${details.notification().id()}">id</p>
+        </div>
+        <div class="actions">
+            <form th:action="@{/ops/notifications/{id}/requeue(id=${details.notification().id()})}" method="post"
+                  class="inline" th:if="${details.notification().requeueable()}"
+                  data-confirm="Queue this for delivery again?">
+                <button type="submit" class="button button--primary">Requeue</button>
+            </form>
+            <a class="button button--quiet" th:href="@{/ops/notifications}">All notifications</a>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2 class="card__title">Delivery</h2>
+            <dl class="pairs">
+                <dt>Status</dt>
+                <dd><span th:replace="~{fragments/bits :: badge(${details.notification().status()})}"></span></dd>
+                <dt>Channel</dt>
+                <dd th:text="${details.notification().channel()}">WEBHOOK</dd>
+                <dt>Recipient</dt>
+                <dd class="mono" th:text="${details.notification().recipient()} ?: '—'">—</dd>
+                <dt>Attempts</dt>
+                <dd th:text="${details.notification().attemptCount()}">0</dd>
+                <dt>Next attempt</dt>
+                <dd th:text="${details.notification().nextAttemptAt() != null
+                        ? @fmt.instant(details.notification().nextAttemptAt()) + ' (' + @fmt.relative(details.notification().nextAttemptAt()) + ')'
+                        : '—'}">—</dd>
+                <dt>Delivered</dt>
+                <dd th:text="${@fmt.instant(details.notification().deliveredAt())}">—</dd>
+                <dt th:if="${details.notification().lastError() != null}">Last error</dt>
+                <dd th:if="${details.notification().lastError() != null}" th:text="${details.notification().lastError()}">—</dd>
+            </dl>
+        </div>
+
+        <div class="card">
+            <h2 class="card__title">What caused it</h2>
+            <dl class="pairs">
+                <dt>Event</dt>
+                <dd th:text="${details.notification().eventType()}">PaymentCaptured</dd>
+                <dt>Event id</dt>
+                <dd class="mono" th:text="${details.notification().sourceEventId()}">—</dd>
+                <dt>Sequence</dt>
+                <dd th:text="${details.notification().sequenceNo()}">0</dd>
+                <dt>Hospital</dt>
+                <dd>
+                    <a th:href="@{/ops/merchants/{id}(id=${details.notification().merchantId()})}"
+                       class="mono" th:text="${details.notification().merchantId()}">—</a>
+                </dd>
+                <dt>Payment</dt>
+                <dd class="mono" th:text="${details.notification().paymentId()} ?: '—'">—</dd>
+            </dl>
+            <p class="muted">
+                The event id is what the hospital deduplicates on, and the sequence number lets it ignore
+                an update older than one it has already applied.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card__title">Attempts</h2>
+        <p class="empty" th:if="${details.attempts().isEmpty()}">Not attempted yet.</p>
+        <div class="table-scroll">
+        <table class="table" th:unless="${details.attempts().isEmpty()}">
+            <thead>
+            <tr><th>#</th><th>Outcome</th><th>Response</th><th>Took</th><th>Error</th><th>When</th></tr>
+            </thead>
+            <tbody>
+            <tr th:each="a : ${details.attempts()}">
+                <td th:text="${a.attemptNo()}">1</td>
+                <td><span th:replace="~{fragments/bits :: badge(${a.outcome()})}"></span></td>
+                <td th:text="${a.responseCode()} ?: '—'">—</td>
+                <td th:text="${a.durationMs()} + ' ms'">0 ms</td>
+                <td th:text="${a.error()} ?: '—'">—</td>
+                <td th:text="${@fmt.instant(a.attemptedAt())}">—</td>
+            </tr>
+            </tbody>
+        </table>
+        </div>
+        <p class="muted">
+            Append-only: a database trigger refuses updates and deletes, because this is the record of what
+            a hospital was told and when.
+        </p>
+    </div>
+</main>
+</body>
+</html>
