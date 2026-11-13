@@ -1,0 +1,25 @@
+# Test-only values; they protect nothing outside throwaway containers.
+hpg:
+  security:
+    jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
+    issuer: http://localhost
+  messaging:
+    consumer:
+      max-retries: 2
+      initial-interval: 100ms
+      max-interval: 200ms
+  refund:
+    jobs:
+      enabled: false            # tests call the recovery service directly
+      created-retry-after: 0s
+      unknown-verify-after: 0s
+      processing-verify-after: 0s
+    razorpay:
+      key-id: rzp_test_dummy
+      key-secret: test_key_secret
+      webhook-secret: test_webhook_secret
+      connect-timeout: 500ms
+      read-timeout: 800ms
+logging:
+  level:
+    com.hpg: DEBUG

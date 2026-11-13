@@ -1,7 +1,8 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phase 3 complete** (payment-service, state machine, idempotency, provider integration).
-> Phases 4–8 are still design. The table at the bottom says exactly what runs today.
+> Status: **Phases 4 and 5 complete**: Kafka, refund-service, transaction-service (history, status, ledger)
+> and notification-service run end to end behind the gateway. Phases 6–8 are still design.
+> Note: the "ledger-service" of the design documents is implemented as **transaction-service**. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
 > before code relies on it.
@@ -53,10 +54,10 @@ designed but not built.
 | JWT validation at gateway and in merchant-service, role-based access, tenant isolation | **Real** | |
 | Audit log (append-only, DB trigger) | **Real** | merchant-service |
 | Webhook secret encryption at rest (AES-256-GCM) | **Real** | |
-| Gateway routing, correlation IDs, Problem Details errors, Redis rate limiting | **Real** | Routes exist only for merchant-service so far |
-| Gateway deny-list for suspended merchants | **Not yet** | Phase 4 (needs merchant events). Until then a suspended merchant's existing token works for ≤ 15 min; new tokens are refused immediately. |
-| Internal webhook-config endpoint for notification-service | **Real** (endpoint) | Its consumer arrives in Phase 4 |
-| Docker images, Compose profiles `infra` / `core`, per-service DB users | **Real** | Kafka and observability profiles in Phases 4 / 7 |
+| Gateway routing, correlation IDs, Problem Details errors, Redis rate limiting | **Real** | Routes to merchant, payment, refund, transaction and notification services |
+| Gateway deny-list for suspended merchants | **Not yet** | Needs merchant snapshot events (not built yet). Until then a suspended merchant's existing token works for ≤ 15 min; new tokens are refused immediately. |
+| Internal webhook-config endpoint for notification-service | **Real** | Called with a client-credentials token (SERVICE role), cached 60 s |
+| Docker images, Compose profiles `infra` (+Kafka) / `core` / `refund` / `transactions` / `notify`, per-service DB users | **Real** | Observability profile in Phase 7 |
 | CI (GitHub Actions: build + all tests) | **Real** | Image publishing, coverage, secret scanning in Phase 8 |
 | Payment initiation, status, list, capture, cancel; state machine (all 243 transitions tested) | **Real** | Phase 3 |
 | Idempotency-Key (Postgres, same transaction), duplicate-bill protection, daily limit with advisory lock | **Real** | Concurrency-tested |
@@ -67,6 +68,15 @@ designed but not built.
 | Razorpay adapter (orders, payments, capture, signatures, error mapping, timeouts) | **Real code, tested against WireMock only** | **Not yet run against the Razorpay sandbox** (no test keys). See [checklist](razorpay-sandbox-checklist.md). |
 | Resilience4j: circuit breaker, retry with jittered backoff, separate live/recovery bulkheads | **Real** | |
 | Simulated payment provider (`HPG_PAYMENT_PROVIDER=simulated`) | **Simulated** | In-memory, for local demos only; clearly labelled on the checkout page and in logs |
-| Outbox events (PaymentInitiated/Authorized/Captured/Failed/Cancelled/Expired) | **Written to outbox table** | Not yet published — Kafka relay arrives in Phase 4 |
-| Merchant config replica in payment-service | **Real table, seeded manually** | TEMPORARY OPS endpoint until merchant events feed it (Phase 4) |
-| Refunds, ledger, notifications, reconciliation | **Not yet** | Phases 4–6 |
+| Outbox → Kafka relay (in order, one active relay per service via advisory lock, `acks=all`) | **Real** | payment-, refund- and notification-service; tested against Testcontainers Kafka |
+| Consumers: envelope parsing, `processed_events` dedupe, blocking retry with backoff, `<topic>.dlt` | **Real** | Shared in `platform/messaging` |
+| Merchant config replica in payment-service | **Real table, seeded manually** | TEMPORARY OPS endpoint until `merchant.snapshots.v1` replication is built |
+| Refunds: full/partial, atomic reservation (concurrency-tested), idempotency, state machine, webhooks, lookup-before-retry recovery | **Real** | refund-service; Razorpay refund adapter tested against WireMock only |
+| Simulated refund provider | **Simulated** | Same `HPG_PAYMENT_PROVIDER=simulated` switch; refunds complete immediately |
+| Transaction history and status (payments + refunds), stale-event protection, timeline | **Real** | transaction-service, built from events |
+| Double-entry ledger: capture/refund postings, append-only + deferred balance triggers, integrity check, balances, summary report | **Real** | Reversals and settlement postings not yet |
+| Hospital webhooks: HMAC-signed (`timestamp.body`), SSRF guard at delivery, retries with backoff + jitter, DEAD + `NotificationFailed` | **Real** | notification-service |
+| Patient emails (receipt / failed / expired) via SMTP | **Real** | Mailpit locally; addresses encrypted at rest |
+| SMS | **Not yet** | |
+| Web dashboard: hospital view (payments, refunds, transactions, notifications, settings) and operations view (hospitals, failed notifications, ledger) | **Real** | `ui/dashboard`, Compose profile `dashboard`; browser-tested end to end. Sign-in uses client credentials (production would add OIDC user login) |
+| Merchant snapshot replication, gateway deny-list, reconciliation | **Not yet** | Phase 6+ |

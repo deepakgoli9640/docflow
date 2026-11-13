@@ -13,7 +13,8 @@
     <name>HPG :: Platform :: Messaging</name>
     <description>
         Transactional outbox: services append events in the same database transaction as their business
-        change. Phase 3 writes the outbox; the Kafka relay and idempotent consumers arrive in Phase 4.
+        change; a relay publishes them to Kafka in order. Consumers get envelope parsing, idempotency
+        (processed_events), blocking retry and dead-letter topics.
     </description>
 
     <dependencies>
@@ -28,6 +29,20 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

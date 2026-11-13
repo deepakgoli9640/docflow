@@ -1,0 +1,140 @@
+// API client + session. Everything goes to the same origin; nginx forwards /api, /oauth2 and /checkout
+// to the API gateway, so the browser never needs CORS and the gateway enforces every rule as usual.
+
+const TOKEN_KEY = 'hpg.session';
+
+/** Error carrying the RFC 9457 Problem Details body the services return. */
+export class ApiError extends Error {
+  constructor(status, problem) {
+    super(problem?.detail || problem?.title || `HTTP ${status}`);
+    this.status = status;
+    this.problem = problem || {};
+  }
+  get code() { return this.problem.errorCode; }
+  get correlationId() { return this.problem.correlationId; }
+}
+
+// The client secret is kept in memory only (never in storage), so an expired token can be renewed
+// silently while the tab is open. After a reload the user signs in again once the token expires.
+let credentials = null;
+let session = load();
+const listeners = new Set();
+
+function load() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+    return s && s.expiresAt > Date.now() ? s : null;
+  } catch { return null; }
+}
+
+function save(s) {
+  session = s;
+  try {
+    if (s) sessionStorage.setItem(TOKEN_KEY, JSON.stringify(s)); else sessionStorage.removeItem(TOKEN_KEY);
+  } catch { /* storage unavailable: session lives in memory only */ }
+  listeners.forEach((fn) => fn(s));
+}
+
+function decodeJwt(token) {
+  const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  const json = decodeURIComponent(atob(part).split('').map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+  return JSON.parse(json);
+}
+
+async function requestToken(clientId, clientSecret) {
+  const res = await fetch('/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + btoa(`${clientId}:${clientSecret}`),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+  if (!res.ok) {
+    let problem = {};
+    try { problem = await res.json(); } catch { /* not JSON */ }
+    if (res.status === 401 || res.status === 400) {
+      problem.detail = 'Sign-in failed. Check the key ID and secret, and that the hospital is active.';
+    }
+    throw new ApiError(res.status, problem);
+  }
+  const body = await res.json();
+  const claims = decodeJwt(body.access_token);
+  const roles = claims.roles || [];
+  return {
+    token: body.access_token,
+    expiresAt: Date.now() + (body.expires_in || 300) * 1000,
+    clientId,
+    role: roles.includes('OPS') ? 'OPS' : roles.includes('MERCHANT') ? 'MERCHANT' : null,
+    merchantId: claims.mid || null,
+  };
+}
+
+export const auth = {
+  get session() { return session; },
+  onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  async signIn(clientId, clientSecret, expectedRole) {
+    const s = await requestToken(clientId.trim(), clientSecret.trim());
+    if (!s.role) throw new ApiError(403, { detail: 'This client has no dashboard access.' });
+    if (expectedRole && s.role !== expectedRole) {
+      throw new ApiError(403, { detail: expectedRole === 'OPS'
+        ? 'These are hospital credentials. Use the Hospital tab.'
+        : 'These are operations credentials. Use the Operations tab.' });
+    }
+    credentials = { clientId: clientId.trim(), clientSecret: clientSecret.trim() };
+    save(s);
+    return s;
+  },
+  signOut(reason) {
+    credentials = null;
+    save(null);
+    if (reason) sessionStorage.setItem('hpg.signout', reason);
+  },
+};
+
+async function ensureToken() {
+  if (session && session.expiresAt - Date.now() > 30_000) return session.token;
+  if (credentials) {
+    save(await requestToken(credentials.clientId, credentials.clientSecret));
+    return session.token;
+  }
+  auth.signOut('Your session expired. Please sign in again.');
+  throw new ApiError(401, { detail: 'Session expired' });
+}
+
+/**
+ * Calls the API through the gateway.
+ * @param {string} path e.g. /api/v1/payments
+ * @param {{method?: string, body?: any, query?: object, idempotencyKey?: string}} [opts]
+ * @returns {Promise<{data: any, headers: Headers}>}
+ */
+export async function api(path, opts = {}) {
+  const token = await ensureToken();
+  const url = new URL(path, location.origin);
+  for (const [k, v] of Object.entries(opts.query || {})) {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
+  }
+  const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+  const res = await fetch(url, {
+    method: opts.method || 'GET',
+    headers,
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+  });
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try { data = JSON.parse(text); } catch { data = { detail: text.slice(0, 200) }; }
+  }
+  if (res.status === 401) {
+    auth.signOut('Your session is no longer valid. Please sign in again.');
+  }
+  if (!res.ok) throw new ApiError(res.status, data);
+  return { data, headers: res.headers };
+}
+
+export const get = (path, query) => api(path, { query }).then((r) => r.data);
+
+/** A fresh key per user action; reused if the same form is submitted twice. */
+export const newIdempotencyKey = () => crypto.randomUUID();

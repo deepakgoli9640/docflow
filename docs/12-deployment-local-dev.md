@@ -28,9 +28,10 @@ startup and less memory — fine locally, not for load tests or production.)
 | Profile | Starts |
 |---|---|
 | `infra` | postgres, kafka, redis |
-| `core` | api-gateway, merchant-service, payment-service (all three exist since Phase 3) |
+| `core` | api-gateway, merchant-service, payment-service |
 | `refund` | refund-service |
-| `ledger` | ledger-service |
+| `transactions` | transaction-service (history, status, ledger) |
+| `dashboard` | web dashboard for hospitals and operations on :8090 (nginx, ~5 MB) |
 | `notify` | notification-service, mailpit |
 | `recon` | reconciliation-service |
 | `obs` | prometheus, grafana, jaeger |
@@ -46,7 +47,7 @@ hpg --profile infra up -d
 ./mvnw -DskipTests package
 hpg --profile infra --profile core up -d --build
 
-# Later phases add: --profile refund --profile ledger --profile notify --profile recon --profile obs
+# The other services: --profile refund --profile transactions --profile notify   (recon / obs: later phases)
 
 # Stop everything, keep data / wipe data
 hpg --profile "*" down
@@ -56,6 +57,10 @@ hpg --profile "*" down -v
 Measured in Phase 3 (`docker stats` after both smoke tests): api-gateway 225 MiB, merchant-service
 272 MiB, payment-service 262 MiB, postgres 82 MiB, redis 5 MiB — about 850 MB for the `infra` + `core`
 profiles.
+
+Measured with every implemented service (`infra core refund transactions notify`, after
+`smoke-test-phase4.sh`): gateway 205 MiB, merchant 246, payment 284, refund 263, transaction 258,
+notification 268, Kafka 446, Postgres 147, Mailpit 11, Redis 3 — about **2.1 GB**.
 
 **Recommended day-to-day workflow:** `infra` in Docker + one or two services from IntelliJ /
 `./mvnw -pl services/merchant-service spring-boot:run -Dspring-boot.run.profiles=local`. The `local`

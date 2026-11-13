@@ -17,7 +17,7 @@
 |---|---|---|---|---|
 | `payment.events.v1` | `paymentId` | 3 / 12 | 7 d | payment-service |
 | `refund.events.v1` | `paymentId` | 3 / 12 | 7 d | refund-service |
-| `ledger.events.v1` | `paymentId` | 3 / 6 | 7 d | ledger-service |
+| `ledger.events.v1` | `paymentId` | 3 / 6 | 7 d | transaction-service (not yet published) |
 | `merchant.snapshots.v1` | `merchantId` | 1 / 3 | **compacted** | merchant-service |
 | `reconciliation.events.v1` | `businessDate` | 1 / 1 | 30 d | reconciliation-service |
 | `notification.events.v1` | `notificationId` | 1 / 3 | 7 d | notification-service |
@@ -131,13 +131,17 @@ flowchart LR
 
 | Consumer (group) | Topics | Purpose | Retry style |
 |---|---|---|---|
-| payment-service `payment-merchant-replica` | merchant.snapshots.v1 | merchant config replica | blocking |
-| refund-service `refund-payment-replica` | payment.events.v1 (`PaymentCaptured`) | `refundable_payments` | blocking |
-| refund-service `refund-merchant-replica` | merchant.snapshots.v1 | merchant status/limits | blocking |
-| ledger-service `ledger-posting` | payment.events.v1, refund.events.v1 | postings | **blocking** (order matters) |
-| notification-service `notification-intake` | payment, refund, reconciliation events | create notification rows | non-blocking retry topics |
-| notification-service `notification-merchant-replica` | merchant.snapshots.v1 | webhook URL, preferences | blocking |
-| reconciliation-service `recon-internal-txns` | ledger.events.v1 | `internal_transactions` | blocking |
+| payment-service `payment-merchant-replica` *(not built yet)* | merchant.snapshots.v1 | merchant config replica | blocking |
+| refund-service `refund-payment-replica` ✅ | payment.events.v1 (`PaymentCaptured`) | `refundable_payments` | blocking |
+| refund-service `refund-merchant-replica` *(not built yet)* | merchant.snapshots.v1 | merchant status/limits | blocking |
+| transaction-service `transaction-payments` ✅ | payment.events.v1 | history, status, capture postings | **blocking** (order matters) |
+| transaction-service `transaction-refunds` ✅ | refund.events.v1 | history, status, refund postings (waits for the capture) | **blocking** |
+| notification-service `notification-payments` / `notification-refunds` ✅ | payment / refund events | create notification rows (delivery is a separate DB-driven dispatcher with its own retries) | blocking (intake is local and fast) |
+| notification-service `notification-merchant-replica` *(not built)* | merchant.snapshots.v1 | — webhook config is fetched from merchant-service instead (cached 60 s) | — |
+| reconciliation-service `recon-internal-txns` *(Phase 6)* | ledger.events.v1 | `internal_transactions` | blocking |
+
+Implemented consumers use **separate consumer groups per topic** (D42) and record their dedupe markers in
+`processed_events` under that group name.
 
 - **Blocking retry** (`DefaultErrorHandler` + `ExponentialBackOffWithMaxRetries`, jittered): the
   partition waits while the record is retried. Used where **order matters** (ledger, replicas).
@@ -172,7 +176,7 @@ flowchart LR
     MS["merchant-service"] -->|MerchantSnapshot| MT{{"merchant.snapshots.v1"}}
     PS["payment-service"] -->|"PaymentInitiated / Authorized /<br/>Captured / Failed / Cancelled / Expired"| PT{{"payment.events.v1"}}
     RS["refund-service"] -->|"RefundInitiated / Completed / Failed"| RT{{"refund.events.v1"}}
-    LS["ledger-service"] -->|TransactionCreated| LT{{"ledger.events.v1"}}
+    LS["transaction-service"] -->|TransactionCreated| LT{{"ledger.events.v1"}}
     RC["reconciliation-service"] -->|ReconciliationCompleted| CT{{"reconciliation.events.v1"}}
     NS["notification-service"] -->|NotificationFailed| NT{{"notification.events.v1"}}
 

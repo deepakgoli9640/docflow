@@ -1,0 +1,13 @@
+# Test-only values.
+hpg:
+  security:
+    jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
+    issuer: http://localhost
+  messaging:
+    consumer:
+      max-retries: 10
+      initial-interval: 200ms
+      max-interval: 500ms
+logging:
+  level:
+    com.hpg: DEBUG

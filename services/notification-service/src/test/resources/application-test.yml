@@ -1,0 +1,23 @@
+# Test-only values; they protect nothing outside throwaway containers.
+hpg:
+  security:
+    jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
+    issuer: http://localhost
+    encryption-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+  messaging:
+    consumer:
+      max-retries: 2
+      initial-interval: 100ms
+      max-interval: 200ms
+  notification:
+    client-secret: test-notification-secret
+    allow-insecure-webhooks: true   # WireMock plays the hospital on http://localhost
+    webhook-config-cache-ttl: 0s
+    dispatch:
+      enabled: false                # tests drive the dispatcher directly
+      initial-backoff: 1ms
+      max-backoff: 1ms
+      max-attempts: 3
+logging:
+  level:
+    com.hpg: DEBUG

@@ -30,6 +30,6 @@ SQL
 create_service_db merchant_db       merchant_app       "${MERCHANT_DB_PASSWORD:-}"
 create_service_db payment_db        payment_app        "${PAYMENT_DB_PASSWORD:-}"
 create_service_db refund_db         refund_app         "${REFUND_DB_PASSWORD:-}"
-create_service_db ledger_db         ledger_app         "${LEDGER_DB_PASSWORD:-}"
+create_service_db transaction_db    transaction_app    "${TRANSACTION_DB_PASSWORD:-}"
 create_service_db notification_db   notification_app   "${NOTIFICATION_DB_PASSWORD:-}"
 create_service_db recon_db          recon_app          "${RECON_DB_PASSWORD:-}"

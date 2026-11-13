@@ -1,0 +1,67 @@
+### Healthcare Payment Gateway - refunds, transaction history, notifications
+### Prerequisites: a CAPTURED payment (see payment.http) and the stack running with
+###   docker compose -f deploy/docker-compose.yml --profile infra --profile core \
+###     --profile refund --profile transactions --profile notify up -d
+
+@gw = http://localhost:8080
+
+### 1. Partial refund. Idempotency-Key is REQUIRED. 409 PAYMENT_NOT_YET_REFUNDABLE right after capture
+###    means refund-service has not consumed PaymentCaptured yet: retry after a second or two.
+POST {{gw}}/api/v1/refunds
+Authorization: Bearer {{token}}
+Idempotency-Key: 0b3e9a4c-5d61-4e7f-8a90-1c2d3e4f5a6b
+Content-Type: application/json
+
+{
+  "paymentId": "{{paymentId}}",
+  "amount": { "amount": "5000.00", "currency": "INR" },
+  "reason": "Procedure partially covered on re-adjudication"
+}
+
+### 2. More than the remaining refundable amount -> 422 REFUND_EXCEEDS_CAPTURED_AMOUNT (+ remainingRefundable)
+POST {{gw}}/api/v1/refunds
+Authorization: Bearer {{token}}
+Idempotency-Key: 4c1d2e3f-0000-4000-8000-00000000abcd
+Content-Type: application/json
+
+{ "paymentId": "{{paymentId}}", "amount": { "amount": "99999.00", "currency": "INR" } }
+
+### 3. A refund with its status history
+GET {{gw}}/api/v1/refunds/{{refundId}}
+Authorization: Bearer {{token}}
+
+### 4. Refunds of a payment
+GET {{gw}}/api/v1/refunds?paymentId={{paymentId}}
+Authorization: Bearer {{token}}
+
+### 5. Transaction history (payments and refunds), newest first
+GET {{gw}}/api/v1/transactions?paymentId={{paymentId}}
+Authorization: Bearer {{token}}
+
+### 6. One transaction with its status timeline and double-entry ledger entries
+GET {{gw}}/api/v1/transactions/{{transactionRef}}
+Authorization: Bearer {{token}}
+
+### 7. Captured, refunded and net totals for a period
+GET {{gw}}/api/v1/reports/summary?from=2026-11-01T00:00:00Z&to=2026-12-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### 8. Notifications for a payment: hospital webhooks and patient emails, with delivery status
+GET {{gw}}/api/v1/notifications?paymentId={{paymentId}}
+Authorization: Bearer {{token}}
+
+### 9. One notification with every delivery attempt
+GET {{gw}}/api/v1/notifications/{{notificationId}}
+Authorization: Bearer {{token}}
+
+### 10. OPS: ledger integrity check and an account balance
+GET {{gw}}/api/v1/admin/ledger/integrity
+Authorization: Bearer {{opsToken}}
+
+###
+GET {{gw}}/api/v1/admin/ledger/accounts/MERCHANT_PAYABLE:{{merchantId}}/balance
+Authorization: Bearer {{opsToken}}
+
+### 11. OPS: re-queue a DEAD notification after the hospital fixed its endpoint
+POST {{gw}}/api/v1/admin/notifications/{{notificationId}}/retry
+Authorization: Bearer {{opsToken}}

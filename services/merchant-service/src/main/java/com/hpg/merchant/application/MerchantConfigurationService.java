@@ -45,6 +45,13 @@ public class MerchantConfigurationService {
         return require(merchantId);
     }
 
+    /** OPS view of any merchant's configuration (the webhook secret itself is never returned). */
+    @PreAuthorize("hasRole('OPS')")
+    @Transactional(readOnly = true)
+    public MerchantConfiguration getForOps(UUID merchantId) {
+        return require(merchantId);
+    }
+
     /** Full replacement (PUT semantics) after validating against the platform maximums. */
     @PreAuthorize("hasRole('MERCHANT')")
     @Transactional

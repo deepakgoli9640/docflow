@@ -1,4 +1,4 @@
-# api-gateway. Only routes to services that exist are configured; later phases add routes.
+# api-gateway: the single entry point. Routes to every business service; reconciliation arrives later.
 server:
   port: 8080
   shutdown: graceful
@@ -94,6 +94,51 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 64KB
+
+            # --- refund-service ---------------------------------------------------------
+            - id: refund-api
+              uri: ${HPG_REFUND_SERVICE_URI:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/refunds,/api/v1/refunds/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_API_PER_SEC:50}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_API_BURST:100}
+            - id: refund-webhooks
+              uri: ${HPG_REFUND_SERVICE_URI:http://localhost:8083}
+              predicates:
+                - Path=/webhooks/razorpay/refunds
+                - Method=POST
+              filters:
+                - name: RequestSize
+                  args:
+                    maxSize: 64KB
+
+            # --- transaction-service ----------------------------------------------------
+            - id: transaction-api
+              uri: ${HPG_TRANSACTION_SERVICE_URI:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/transactions,/api/v1/transactions/**,/api/v1/reports/**,/api/v1/admin/ledger/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_API_PER_SEC:50}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_API_BURST:100}
+
+            # --- notification-service ---------------------------------------------------
+            - id: notification-api
+              uri: ${HPG_NOTIFICATION_SERVICE_URI:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/notifications,/api/v1/notifications/**,/api/v1/admin/notifications/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@principalKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${HPG_RATE_API_PER_SEC:50}
+                    redis-rate-limiter.burstCapacity: ${HPG_RATE_API_BURST:100}
 
 hpg:
   gateway:

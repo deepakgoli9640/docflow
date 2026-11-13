@@ -288,6 +288,22 @@ class MerchantApiIT {
         }
 
         @Test
+        void opsReadsAMerchantsConfigurationWithoutTheWebhookSecret() throws Exception {
+            var m = api.register(uniqueEmail());
+            String body = mvc.perform(get("/api/v1/admin/merchants/{id}/configuration", m.id())
+                            .header(HttpHeaders.AUTHORIZATION, bearer(api.opsToken())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.captureMode").exists())
+                    .andExpect(jsonPath("$.webhookSecretConfigured").value(true))
+                    .andReturn().getResponse().getContentAsString();
+            org.assertj.core.api.Assertions.assertThat(body).doesNotContain(m.webhookSecret());
+            String merchantToken = api.token(m.keyId(), m.keySecret());
+            mvc.perform(get("/api/v1/admin/merchants/{id}/configuration", m.id())
+                            .header(HttpHeaders.AUTHORIZATION, bearer(merchantToken)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
         void adminListIsPaginatedAndRejectsUnknownSortFields() throws Exception {
             api.register(uniqueEmail());
             String ops = api.opsToken();

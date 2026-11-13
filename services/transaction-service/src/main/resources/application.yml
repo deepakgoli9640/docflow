@@ -1,0 +1,108 @@
+# transaction-service. Secrets come only from environment variables.
+server:
+  port: 8084
+  shutdown: graceful
+
+spring:
+  application:
+    name: transaction-service
+  datasource:
+    url: jdbc:postgresql://${TRANSACTION_DB_HOST:localhost}:${TRANSACTION_DB_PORT:5432}/transaction_db
+    username: ${TRANSACTION_DB_USER:transaction_app}
+    password: ${TRANSACTION_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 3000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+    listener:
+      ack-mode: record
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+    serialization:
+      write-dates-as-timestamps: false
+
+hpg:
+  security:
+    jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
+    issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+    import:
+      - optional:file:../../deploy/env/.env[.properties]
+      - optional:file:./deploy/env/.env[.properties]
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/transaction_db
+logging:
+  structured:
+    format:
+      console: ecs
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+logging:
+  structured:
+    format:
+      console: ecs
