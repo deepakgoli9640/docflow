@@ -4,8 +4,8 @@
 
 @gw = http://localhost:8080
 
-### 0. TEMPORARY (Phase 3 only): copy the merchant's configuration into payment-service (OPS token).
-###    From Phase 4 merchant-service events do this automatically and this endpoint is removed.
+### 0. TEMPORARY: copy the merchant's configuration into payment-service (OPS token). It will be replaced
+###    by merchant.snapshots.v1 replication (not built yet), and this endpoint removed.
 PUT {{gw}}/api/v1/admin/merchant-config-replicas/{{merchantId}}
 Authorization: Bearer {{opsToken}}
 Content-Type: application/json

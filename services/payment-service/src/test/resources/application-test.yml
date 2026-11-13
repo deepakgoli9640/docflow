@@ -1,5 +1,13 @@
 # Test-only values; they protect nothing outside throwaway containers.
+spring:
+  kafka:
+    admin:
+      auto-create: false        # most tests run without Kafka; OutboxRelayIT starts one
 hpg:
+  messaging:
+    outbox:
+      relay:
+        enabled: false          # tests inspect the outbox table directly; OutboxRelayIT turns it on
   security:
     jwk-set-uri: http://localhost:1/oauth2/jwks   # unused: tests authenticate with spring-security-test's jwt()
     issuer: http://localhost

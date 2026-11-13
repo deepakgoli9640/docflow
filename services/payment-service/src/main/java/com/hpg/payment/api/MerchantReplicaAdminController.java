@@ -14,11 +14,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * <b>TEMPORARY — Phase 3 only.</b> Lets OPS copy a merchant's configuration into payment-service until
- * Phase 4 replicates it automatically from merchant-service events. It will be removed then.
+ * <b>TEMPORARY.</b> Lets OPS copy a merchant's configuration into payment-service until it is replicated
+ * automatically from {@code merchant.snapshots.v1} (not built yet). It will be removed then.
  */
 @RestController
-@Tag(name = "Merchant replica (OPS, temporary)", description = "Phase 3 stop-gap until merchant events exist")
+@Tag(name = "Merchant replica (OPS, temporary)", description = "Stop-gap until merchant snapshot events exist")
 public class MerchantReplicaAdminController {
 
     private final MerchantReplicaService replicas;

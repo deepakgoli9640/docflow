@@ -65,7 +65,7 @@ rate of change**, not around nouns.
 | **merchant-service** | Merchants, credentials (API keys), merchant configuration, webhook settings, token issuance | Payments, money |
 | **payment-service** | Payments, provider orders, payment attempts, payment state machine, provider integration for payments, payment webhooks, payment recovery | Refunds, ledger balances |
 | **refund-service** | Refunds, refund attempts, refundable-amount accounting, refund webhooks | Payment state |
-| **ledger-service** | Financial transactions (journal), ledger accounts, ledger entries, merchant transaction history and reports | Operational payment/refund state |
+| **transaction-service** (designed as *ledger-service*) | Transaction history and status, financial transactions (journal), ledger accounts, ledger entries, merchant reports | Operational payment/refund state |
 | **notification-service** | Notification records, delivery attempts, hospital webhook delivery, email/SMS | What happened to the payment (it only reports it) |
 | **reconciliation-service** | Settlement files/records, reconciliation batches and results, discrepancy workflow | The ledger (it never writes to it) |
 
@@ -141,7 +141,7 @@ flowchart LR
         MS["merchant-service<br/>+ token issuer"]
         PS["payment-service"]
         RS["refund-service"]
-        LS["ledger-service"]
+        LS["transaction-service<br/>(history, status, ledger)"]
         NS["notification-service"]
         RC["reconciliation-service"]
     end
@@ -152,7 +152,7 @@ flowchart LR
         MDB[("merchant_db")]
         PDB[("payment_db")]
         RDB[("refund_db")]
-        LDB[("ledger_db")]
+        LDB[("transaction_db")]
         NDB[("notification_db")]
         CDB[("recon_db")]
     end
@@ -208,7 +208,7 @@ Solid arrows are the main flows. The single dotted service-to-service arrow
 
 Why: a synchronous call chain makes availability multiplicative (three services at 99.9% each give
 ~99.7% for the chain) and couples deploys. Events let payment-service keep taking payments while
-ledger-service is down; the ledger catches up when it returns.
+transaction-service is down; the ledger catches up when it returns.
 
 ### 4.2 The complete list of interactions
 
@@ -272,11 +272,11 @@ healthcare-payment-gateway/
 │   ├── merchant-service/
 │   ├── payment-service/
 │   ├── refund-service/
-│   ├── ledger-service/
+│   ├── transaction-service/
 │   ├── notification-service/
 │   └── reconciliation-service/
 ├── deploy/
-│   ├── docker-compose.yml           profiles: infra, core, refund, ledger, notify, recon, obs, tools
+│   ├── docker-compose.yml           profiles: infra, core, refund, transactions, notify, recon, obs, tools
 │   ├── postgres/init/               creates one database + one user per service
 │   ├── prometheus/  grafana/
 │   └── env/.env.example
@@ -293,7 +293,7 @@ healthcare-payment-gateway/
 | merchant-service | 8081 |
 | payment-service | 8082 |
 | refund-service | 8083 |
-| ledger-service | 8084 |
+| transaction-service | 8084 |
 | notification-service | 8085 |
 | reconciliation-service | 8086 |
 | PostgreSQL / Kafka / Redis | 5432 / 9092 / 6379 |

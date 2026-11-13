@@ -103,7 +103,7 @@ sequenceDiagram
     participant DB as refund_db
     participant R as Razorpay
     participant K as Kafka
-    participant L as ledger-service
+    participant L as transaction-service
     participant N as notification-service
 
     H->>RS: POST /api/v1/refunds {paymentId, amount, reason} (Idempotency-Key)

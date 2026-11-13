@@ -45,11 +45,22 @@ public class OutboxWriter {
     @Transactional(propagation = Propagation.MANDATORY)
     public <T> EventEnvelope<T> append(String topic, String aggregateType, String aggregateId, long aggregateVersion,
             UUID merchantId, String eventType, int eventVersion, String causationId, T payload) {
+        return append(topic, aggregateId, aggregateType, aggregateId, aggregateVersion, merchantId, eventType,
+                eventVersion, causationId, payload);
+    }
+
+    /**
+     * Same as {@link #append(String, String, String, long, UUID, String, int, String, Object)} with an explicit
+     * Kafka message key. Refund events use the payment id as key so all refunds of one payment stay ordered.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public <T> EventEnvelope<T> append(String topic, String messageKey, String aggregateType, String aggregateId,
+            long aggregateVersion, UUID merchantId, String eventType, int eventVersion, String causationId, T payload) {
         EventEnvelope<T> envelope = new EventEnvelope<>(Ids.newId(), eventType, eventVersion, clock.instant(), producer,
                 aggregateType, aggregateId, aggregateVersion, merchantId, MDC.get(CorrelationId.MDC_KEY), causationId,
                 payload);
         JsonNode json = objectMapper.valueToTree(envelope);
-        repository.save(new OutboxEvent(envelope.eventId(), aggregateType, aggregateId, eventType, topic, aggregateId,
+        repository.save(new OutboxEvent(envelope.eventId(), aggregateType, aggregateId, eventType, topic, messageKey,
                 json, envelope.occurredAt()));
         return envelope;
     }

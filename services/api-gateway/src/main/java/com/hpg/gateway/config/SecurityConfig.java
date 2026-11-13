@@ -49,9 +49,9 @@ public class SecurityConfig {
                         .pathMatchers("/oauth2/token", "/oauth2/jwks").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/v1/merchants").permitAll()
                         // Patient checkout (protected by unguessable token + provider signature) and provider
-                        // webhooks (HMAC signature): authenticated by the payment service, not by bearer tokens.
+                        // webhooks (HMAC signature): authenticated by the payment/refund service, not by bearer tokens.
                         .pathMatchers("/checkout/**").permitAll()
-                        .pathMatchers(HttpMethod.POST, "/webhooks/razorpay/payments").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/webhooks/razorpay/payments", "/webhooks/razorpay/refunds").permitAll()
                         // Actuator lives on the separate management port (9080), which is not published.
                         .pathMatchers("/actuator/**").permitAll()
                         // Service-internal endpoints are never exposed through the edge.

@@ -10,8 +10,8 @@ import java.time.Clock;
 import java.util.UUID;
 
 /**
- * Maintains the local merchant configuration replica. From Phase 4 it is fed by merchant.snapshots.v1;
- * until then OPS seeds it through a TEMPORARY admin endpoint.
+ * Maintains the local merchant configuration replica. It is meant to be fed by merchant.snapshots.v1;
+ * until that replication exists OPS seeds it through a TEMPORARY admin endpoint.
  */
 @Service
 public class MerchantReplicaService {

@@ -57,7 +57,23 @@ Delivered as planned, with these differences:
 - **Exit:** a real Razorpay **test-mode** payment completed through the checkout page (if you
   provide sandbox keys), or the simulator flow, with the difference stated.
 
-## Phase 4 — Kafka, outbox, notification-service
+## Phase 4 — Kafka, outbox, notification-service ✅ done (merchant snapshots pending)
+
+Delivered, with these differences:
+- **Merchant snapshot replication (`merchant.snapshots.v1`) is not built yet.** payment-service's replica
+  is still seeded through the temporary OPS endpoint, and the gateway deny-list still waits for it.
+- Notification retries are **database-driven** (`next_attempt_at`, exponential backoff + jitter, lease-based
+  claiming with `SKIP LOCKED`) instead of Kafka retry topics: intake only stores rows, so the partition never
+  waits on a hospital endpoint, and multi-hour retries do not belong in Kafka anyway (D18 already said so
+  for webhook delivery).
+- One active outbox relay per service is ensured with a transaction-scoped Postgres advisory lock rather
+  than ShedLock, so `platform/messaging` does not depend on ShedLock.
+- No SMS port yet; email goes over real SMTP (Mailpit locally).
+- Tests: OutboxRelayIT (payment-service → Kafka), NotificationFlowIT (signed webhook, retry then success,
+  retry budget → DEAD + `NotificationFailed`, skipped without URL, duplicate events), unit tests for
+  backoff, signing and the SSRF guard. `scripts/smoke-test-phase4.sh` runs the whole flow in Docker.
+
+Planned:
 
 - `platform/event-contracts`, `platform/messaging` (outbox relay, idempotent consumer helper,
   error handlers, DLT config).
@@ -69,7 +85,21 @@ Delivered as planned, with these differences:
   (**simulated**, clearly labelled), `NotificationFailed` events.
 - Tests: Kafka Testcontainers producer/consumer tests, duplicate-event tests, Kafka-outage test.
 
-## Phase 5 — refund-service and ledger-service
+## Phase 5 — refund-service and ledger-service ✅ done (as refund-service + transaction-service)
+
+Delivered, with these differences:
+- ledger-service is named **transaction-service** (database `transaction_db`): besides the ledger it owns the
+  merchant-facing transaction history and status of every payment and refund.
+- `TransactionCreated` / `ledger.events.v1`, reversals and the reversal API are not built yet (the outbox
+  table exists for them). Refund-service has no merchant replica yet, so it does not check
+  `MERCHANT_SUSPENDED` (a suspended merchant cannot get new tokens anyway).
+- transaction-service uses two consumers (payment and refund topics): a RefundCompleted waiting in blocking
+  retry for its capture must not also stop the topic that delivers that capture.
+- Tests: RefundFlowIT (webhook completion, idempotent replay, 8 concurrent refunds vs. the captured amount,
+  timeout → lookup → adopt without a second refund, rejection releases the reservation),
+  TransactionFlowIT (refund before capture, stale event, duplicates, ledger immutability, reports, roles).
+
+Planned:
 
 - **refund-service**: `refundable_payments` replica, atomic reservation, refund state machine,
   Razorpay refund adapter, refund webhooks, recovery with lookup-before-retry.

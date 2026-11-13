@@ -19,7 +19,7 @@ sed -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(rand)|" \
     -e "s|^MERCHANT_DB_PASSWORD=.*|MERCHANT_DB_PASSWORD=$(rand)|" \
     -e "s|^PAYMENT_DB_PASSWORD=.*|PAYMENT_DB_PASSWORD=$(rand)|" \
     -e "s|^REFUND_DB_PASSWORD=.*|REFUND_DB_PASSWORD=$(rand)|" \
-    -e "s|^LEDGER_DB_PASSWORD=.*|LEDGER_DB_PASSWORD=$(rand)|" \
+    -e "s|^TRANSACTION_DB_PASSWORD=.*|TRANSACTION_DB_PASSWORD=$(rand)|" \
     -e "s|^NOTIFICATION_DB_PASSWORD=.*|NOTIFICATION_DB_PASSWORD=$(rand)|" \
     -e "s|^RECON_DB_PASSWORD=.*|RECON_DB_PASSWORD=$(rand)|" \
     -e "s|^HPG_ENCRYPTION_KEY=.*|HPG_ENCRYPTION_KEY=$(openssl rand -base64 32)|" \
@@ -28,4 +28,4 @@ sed -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(rand)|" \
     deploy/env/.env.example > "$target"
 chmod 600 "$target"
 echo "Wrote $target with random secrets."
-echo "Add your Razorpay TEST-mode keys to it when you reach Phase 3."
+echo "Add your Razorpay TEST-mode keys to it, or keep HPG_PAYMENT_PROVIDER=simulated for local demos."
