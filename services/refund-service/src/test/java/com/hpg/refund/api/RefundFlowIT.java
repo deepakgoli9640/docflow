@@ -353,4 +353,33 @@ class RefundFlowIT {
         mvc.perform(post("/api/v1/refunds").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    void disputeEvent(UUID paymentId, UUID disputeId, String type, String status) throws Exception {
+        var payload = new com.hpg.events.dispute.DisputeEventPayload(disputeId, paymentId, merchantId, "RAZORPAY",
+                "disp_1", "pay_D", Money.inr("1000.00"), null, status, "fraud", "chargeback", null, Instant.now());
+        kafka.send(Topics.DISPUTE_EVENTS, paymentId.toString(), json.writeValueAsString(new EventEnvelope<>(Ids.newId(),
+                type, 1, Instant.now(), "payment-service", "Dispute", disputeId.toString(), 1, merchantId, "corr", null,
+                payload))).get();
+    }
+
+    @Test
+    void noRefundWhileADisputeIsOpen() throws Exception {
+        UUID paymentId = capturedPayment("1000.00", "pay_D");
+        UUID disputeId = Ids.newId();
+        disputeEvent(paymentId, disputeId, "DisputeOpened", "OPEN");
+        await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
+            MvcResult r = refund(paymentId, "100.00", "key-disputed-" + UUID.randomUUID());
+            assertThat(r.getResponse().getStatus()).isEqualTo(409);
+            assertThat(json.readTree(r.getResponse().getContentAsString()).get("errorCode").asText())
+                    .isEqualTo("PAYMENT_DISPUTED");
+        });
+        razorpay.verify(0, postRequestedFor(urlEqualTo("/v1/payments/pay_D/refund")));
+
+        // Decided (won): refunds are possible again.
+        disputeEvent(paymentId, disputeId, "DisputeResolved", "WON");
+        razorpay.stubFor(WireMock.post("/v1/payments/pay_D/refund").willReturn(okJson(refundJson("rfnd_D1", "pending", 10000,
+                "{{jsonPath request.body '$.receipt'}}")).withTransformers("response-template")));
+        await().atMost(Duration.ofSeconds(60)).until(() ->
+                refund(paymentId, "100.00", "key-after-dispute").getResponse().getStatus() == 201);
+    }
 }

@@ -216,4 +216,34 @@ class TransactionFlowIT {
                 .andExpect(jsonPath("$.healthy").value(true));
     }
 
+    @Test
+    void chargebackAndItsReversalAreBookedAgainstThePayment() throws Exception {
+        UUID paymentId = Ids.newId();
+        var captured = new PaymentEventPayload(paymentId, merchantId, "BILL-CB", Money.inr("800.00"), "CAPTURED",
+                null, "AUTO", "RAZORPAY", "order_cb", "pay_cb", false, null, null, t0, null);
+        send(Topics.PAYMENT_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), "PaymentCaptured", 1, t0,
+                "payment-service", "Payment", paymentId.toString(), 2, merchantId, "corr", null, captured));
+        UUID disputeId = Ids.newId();
+        for (String[] step : new String[][] {{"DisputeOpened", "OPEN", null}, {"DisputeFundsDeducted", "OPEN", "800.00"},
+                {"DisputeFundsReinstated", "WON", "800.00"}, {"DisputeResolved", "WON", null}}) {
+            var d = new com.hpg.events.dispute.DisputeEventPayload(disputeId, paymentId, merchantId, "RAZORPAY", "disp_cb",
+                    "pay_cb", Money.inr("800.00"), step[2] == null ? null : Money.inr(step[2]), step[1], "fraud",
+                    "chargeback", null, t0);
+            send(Topics.DISPUTE_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), step[0], 1, t0, "payment-service",
+                    "Dispute", disputeId.toString(), 1, merchantId, "corr", null, d));
+        }
+        await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.queryForObject("""
+                SELECT count(*) FROM transaction_events e JOIN transactions t ON t.id = e.transaction_id
+                WHERE t.payment_id = ? AND e.event_type LIKE 'Dispute%'""", Integer.class, paymentId) == 4);
+        var postings = jdbc.queryForList("""
+                SELECT e.posting_type, e.account_code, e.direction, e.amount FROM ledger_entries e
+                JOIN transactions t ON t.id = e.transaction_id WHERE t.payment_id = ? ORDER BY e.id""", paymentId);
+        assertThat(postings).extracting(m -> m.get("posting_type") + " " + m.get("account_code").toString().replace(merchantId.toString(), "M")
+                        + " " + m.get("direction") + " " + m.get("amount"))
+                .containsExactly("CAPTURE PROVIDER_CLEARING DEBIT 800.00", "CAPTURE MERCHANT_PAYABLE:M CREDIT 800.00",
+                        "CHARGEBACK MERCHANT_PAYABLE:M DEBIT 800.00", "CHARGEBACK PROVIDER_CLEARING CREDIT 800.00",
+                        "CHARGEBACK_REVERSAL PROVIDER_CLEARING DEBIT 800.00", "CHARGEBACK_REVERSAL MERCHANT_PAYABLE:M CREDIT 800.00");
+        mvc.perform(get("/api/v1/admin/ledger/integrity").with(ops()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.healthy").value(true));
+    }
 }

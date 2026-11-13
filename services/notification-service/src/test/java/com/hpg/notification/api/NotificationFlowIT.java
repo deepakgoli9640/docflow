@@ -270,4 +270,27 @@ class NotificationFlowIT {
         LoggedRequest hook = wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId))).getFirst();
         assertThat(json.readTree(hook.getBodyAsString()).at("/data/refundedTotal/amount").asText()).isEqualTo("500.00");
     }
+
+    @Test
+    void openedDisputeIsSentToTheHospitalWithItsDeadline() throws Exception {
+        wiremock.stubFor(WireMock.post(urlEqualTo("/hooks/" + merchantId)).willReturn(aResponse().withStatus(200)));
+        UUID paymentId = Ids.newId();
+        UUID disputeId = Ids.newId();
+        Instant respondBy = Instant.parse("2026-12-01T00:00:00Z");
+        var payload = new com.hpg.events.dispute.DisputeEventPayload(disputeId, paymentId, merchantId, "RAZORPAY",
+                "disp_9", "pay_9", Money.inr("1200.00"), null, "OPEN", "chargeback_unauthorised", "chargeback", respondBy,
+                Instant.now());
+        kafka.send(Topics.DISPUTE_EVENTS, paymentId.toString(), json.writeValueAsString(new EventEnvelope<>(Ids.newId(),
+                "DisputeOpened", 1, Instant.now(), "payment-service", "Dispute", disputeId.toString(), 0, merchantId,
+                "corr", null, payload))).get();
+
+        Notification n = awaitNotifications(paymentId, 1).getFirst();
+        dispatchUntilQuiet();
+        assertThat(n.getPublicEventType()).isEqualTo("dispute.opened");
+        LoggedRequest hook = wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId))).getFirst();
+        JsonNode body = json.readTree(hook.getBodyAsString());
+        assertThat(body.get("type").asText()).isEqualTo("dispute.opened");
+        assertThat(body.at("/data/respondBy").asText()).isEqualTo("2026-12-01T00:00:00Z");
+        assertThat(body.at("/data/amount/amount").asText()).isEqualTo("1200.00");
+    }
 }
