@@ -12,13 +12,14 @@ const MERCHANT_STATUSES = ['PENDING_ACTIVATION', 'ACTIVE', 'SUSPENDED', 'DEACTIV
 export async function overview(main) {
   clear(main, pageHeader('Operations overview', 'Hospitals, delivery failures and ledger health at a glance.'), spinner());
   const count = (path, query) => get(path, { ...query, size: 1 }).then((p) => p.page.totalElements).catch(() => '—');
-  const [active, pending, suspended, dead, integrity, pendingList] = await Promise.all([
+  const [active, pending, suspended, dead, integrity, pendingList, recon] = await Promise.all([
     count('/api/v1/admin/merchants', { status: 'ACTIVE' }),
     count('/api/v1/admin/merchants', { status: 'PENDING_ACTIVATION' }),
     count('/api/v1/admin/merchants', { status: 'SUSPENDED' }),
     count('/api/v1/admin/notifications', { status: 'DEAD' }),
     get('/api/v1/admin/ledger/integrity').catch((e) => e),
     get('/api/v1/admin/merchants', { status: 'PENDING_ACTIVATION', size: 5 }).catch(() => ({ content: [] })),
+    get('/api/v1/reconciliation/batches', { status: 'COMPLETED', size: 1 }).then((p) => p.content[0]).catch(() => undefined),
   ]);
   clear(main,
     pageHeader('Operations overview', 'Hospitals, delivery failures and ledger health at a glance.'),
@@ -28,7 +29,9 @@ export async function overview(main) {
       stat('Suspended', suspended),
       stat('Failed notifications', dead, dead ? h('a', { href: '#/notifications' }, 'Review →') : 'None'),
       stat('Ledger', integrity instanceof Error ? 'Unavailable' : integrity.healthy ? 'Healthy' : 'Check needed',
-        h('a', { href: '#/ledger' }, 'Details →'))),
+        h('a', { href: '#/ledger' }, 'Details →')),
+      stat('Last reconciliation', recon ? recon.businessDate : '—',
+        h('a', { href: '#/reconciliation' }, recon ? `${recon.discrepancies} discrepanc${recon.discrepancies === 1 ? 'y' : 'ies'} →` : 'Start →'))),
     integrity instanceof Error ? errorBox(integrity)
       : !integrity.healthy && h('div', { class: 'alert alert-error' }, h('strong', {}, 'Ledger integrity check failed'),
         h('p', {}, 'Open the Ledger page for the failing checks.')),

@@ -1,7 +1,7 @@
 # Healthcare Payment Gateway (HPG) — Architecture Documentation
 
-> Status: **Phases 4 and 5 complete**: Kafka, refund-service, transaction-service (history, status, ledger)
-> and notification-service run end to end behind the gateway. Phases 6–8 are still design.
+> Status: **Phases 4, 5 and 6 complete**: Kafka, refund-service, transaction-service (history, status, ledger),
+> notification-service and reconciliation-service run end to end behind the gateway. Phases 7–8 are still design.
 > Note: the "ledger-service" of the design documents is implemented as **transaction-service**. The table at the bottom says exactly what runs today.
 > Where a statement depends on Razorpay behaviour, it is marked
 > *(verify in Phase 3)* and will be checked against current Razorpay documentation and the sandbox
@@ -79,4 +79,7 @@ designed but not built.
 | Patient emails (receipt / failed / expired) via SMTP | **Real** | Mailpit locally; addresses encrypted at rest |
 | SMS | **Not yet** | |
 | Web dashboard: hospital view (payments, refunds, transactions, notifications, settings) and operations view (hospitals, failed notifications, ledger) | **Real** | `ui/dashboard`, Compose profile `dashboard`; browser-tested end to end. Sign-in uses client credentials (production would add OIDC user login) |
-| Reconciliation | **Not yet** | Phase 6 |
+| Ledger events (`TransactionCreated` on `ledger.events.v1`) for every capture and refund posting | **Real** | transaction-service, through its outbox |
+| Reconciliation: internal replica from ledger events, streaming CSV upload (SHA-256 dedupe, malformed-row capture), matching engine (all statuses incl. cross-day duplicates), batches, discrepancy workflow, daily report JSON/CSV, `ReconciliationCompleted` | **Real** | reconciliation-service; dashboard page for OPS |
+| Reconciliation from the Razorpay settlement API (scheduled 06:00 IST + on demand) | **Real code, tested against WireMock only** | Needs Razorpay keys; with the simulated provider use CSV uploads |
+| Settlement postings to the ledger, finance email on `ReconciliationCompleted` | **Not yet** | |

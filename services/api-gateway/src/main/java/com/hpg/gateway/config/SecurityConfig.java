@@ -57,6 +57,7 @@ public class SecurityConfig {
                         // Service-internal endpoints are never exposed through the edge.
                         .pathMatchers("/internal/**").denyAll()
                         .pathMatchers("/api/v1/admin/**").hasRole(Roles.OPS)
+                        .pathMatchers("/api/v1/reconciliation/**").hasRole(Roles.OPS)
                         .pathMatchers("/api/**").authenticated()
                         .anyExchange().denyAll())
                 .oauth2ResourceServer(rs -> rs

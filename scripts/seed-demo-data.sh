@@ -70,6 +70,19 @@ echo "Creating refunds..."
 refund "$P1" 5000.00 "Procedure partially covered on re-adjudication"
 refund "$P2" 4500.00 "Duplicate payment at the front desk"
 
+if curl -s -o /dev/null -f -H "Authorization: Bearer $OPS" "$GW/api/v1/reconciliation/batches?size=1"; then
+  echo "Reconciling with a settlement report that has deliberate differences..."
+  for _ in $(seq 1 30); do [[ $(settled_rows | grep -c refund) -ge 2 ]] && break; sleep 1; done
+  sleep 3   # let reconciliation-service receive the ledger events
+  ROWS=$(settled_rows)
+  MISMATCH=$(awk -F, 'NR==1 {printf "%s,%s,%.2f\n", $1, $2, $3 - 10}' <<<"$ROWS")   # provider short by 10.00
+  REPORT=$(printf '%s\n%s\n%s\npayment,pay_unknown_%s,999.00\n' "$MISMATCH" "$(sed -n '3,$p' <<<"$ROWS")" \
+    "$(sed -n 3p <<<"$ROWS")" "$RANDOM")                    # row 2 left out, row 3 twice, one unknown payment
+  CSV=$(mktemp --suffix=.csv); settlement_csv "$REPORT" > "$CSV"
+  BATCH=$(upload_settlement "$CSV" "$(date +%Y-%m-%d)"); rm -f "$CSV"
+  await_batch "$(jq -r .id <<<"$BATCH")" | jq -c '{businessDate, status, matched, mismatched, missingInProvider, missingInInternalSystem, duplicate}'
+fi
+
 cat <<INFO
 
 Demo data ready. Open http://localhost:8090

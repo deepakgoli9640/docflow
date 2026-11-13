@@ -65,9 +65,11 @@ export const humanize = (s) => {
 
 // ---------- status badges
 const TONES = {
-  good: ['CAPTURED', 'COMPLETED', 'DELIVERED', 'ACTIVE', 'APPLIED'],
-  warn: ['PENDING', 'PROCESSING', 'AUTHORIZED', 'UNKNOWN', 'CREATED', 'INITIATED', 'PENDING_ACTIVATION', 'RETRY'],
-  bad: ['FAILED', 'DEAD', 'SUSPENDED', 'DEACTIVATED', 'EXPIRED'],
+  good: ['CAPTURED', 'COMPLETED', 'DELIVERED', 'ACTIVE', 'APPLIED', 'MATCHED', 'RESOLVED'],
+  warn: ['PENDING', 'PROCESSING', 'AUTHORIZED', 'UNKNOWN', 'CREATED', 'INITIATED', 'PENDING_ACTIVATION', 'RETRY',
+    'RUNNING', 'OPEN', 'IN_REVIEW', 'DUPLICATE', 'PENDING_REVIEW'],
+  bad: ['FAILED', 'DEAD', 'SUSPENDED', 'DEACTIVATED', 'EXPIRED', 'MISMATCHED', 'MISSING_IN_PROVIDER',
+    'MISSING_IN_INTERNAL_SYSTEM'],
   muted: ['CANCELLED', 'SKIPPED', 'REVOKED'],
 };
 export function badge(status) {
@@ -96,7 +98,7 @@ export function errorBox(err) {
     (p.errorCode || p.correlationId) && h('p', { class: 'muted small' },
       p.errorCode && `Code ${p.errorCode}`, p.errorCode && p.correlationId && ' · ',
       p.correlationId && `Reference ${p.correlationId}`),
-    p.violations?.length && h('ul', {}, p.violations.map((v) => h('li', {}, `${v.field}: ${v.message}`))));
+    p.violations?.length > 0 && h('ul', {}, p.violations.map((v) => h('li', {}, `${v.field}: ${v.message}`))));
 }
 
 /**
@@ -262,7 +264,7 @@ function fieldInput(f) {
   } else {
     input = h('input', { id, name: f.name, type: f.type || 'text', required: f.required, value: f.value ?? '',
       min: f.min, max: f.max, step: f.step, placeholder: f.placeholder, autocomplete: f.autocomplete || 'off',
-      maxlength: f.maxlength, pattern: f.pattern, inputmode: f.inputmode });
+      maxlength: f.maxlength, pattern: f.pattern, inputmode: f.inputmode, accept: f.accept });
   }
   return h('div', { class: 'field' }, h('label', { for: id }, f.label, f.required ? '' : h('span', { class: 'muted' }, ' (optional)')),
     input, f.hint && h('p', { class: 'hint' }, f.hint));
@@ -271,7 +273,9 @@ function fieldInput(f) {
 function readForm(form, spec) {
   const values = {};
   for (const f of spec) {
-    if (f.type === 'checkboxes') {
+    if (f.type === 'file') {
+      values[f.name] = form.querySelector(`input[name="${f.name}"]`).files[0] || null;
+    } else if (f.type === 'checkboxes') {
       values[f.name] = [...form.querySelectorAll(`input[name="${f.name}"]:checked`)].map((i) => i.value);
     } else if (f.type === 'checkbox') {
       values[f.name] = form.querySelector(`input[name="${f.name}"]`).checked;

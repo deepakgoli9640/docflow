@@ -4,6 +4,7 @@
 #   docker compose -f deploy/docker-compose.yml --profile infra up -d                 # Postgres + Redis + Kafka
 #   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d  # + gateway, merchant, payment
 #   ... --profile refund --profile transactions --profile notify                     # + the other services
+#   ... --profile recon                                                              # reconciliation-service
 #   ... --profile dashboard                                                          # web dashboard on :8090
 #
 # Prerequisites:  ./scripts/init-env.sh   and   ./mvnw -DskipTests package
@@ -225,6 +226,35 @@ services:
       retries: 10
     mem_limit: 512m
 
+  reconciliation-service:
+    profiles: [recon]
+    build: ../services/reconciliation-service
+    image: hpg/reconciliation-service:local
+    env_file: ./env/.env
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      RECON_DB_HOST: postgres
+      HPG_MERCHANT_SERVICE_URI: http://merchant-service:8081
+      HPG_TOKEN_ISSUER: http://merchant-service:8081
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      # Local demos: flag ledger transactions missing from the uploaded report at once instead of after T+3.
+      HPG_RECON_SETTLEMENT_WINDOW_DAYS: "0"
+    ports:
+      - "127.0.0.1:8086:8086"   # debugging only; clients go through the gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 10
+    mem_limit: 512m
+
   api-gateway:
     profiles: [core]
     build: ../services/api-gateway
@@ -240,6 +270,7 @@ services:
       HPG_REFUND_SERVICE_URI: http://refund-service:8083
       HPG_TRANSACTION_SERVICE_URI: http://transaction-service:8084
       HPG_NOTIFICATION_SERVICE_URI: http://notification-service:8085
+      HPG_RECON_SERVICE_URI: http://reconciliation-service:8086
       HPG_TOKEN_ISSUER: http://merchant-service:8081
     ports:
       - "127.0.0.1:8080:8080"

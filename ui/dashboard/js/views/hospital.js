@@ -147,7 +147,7 @@ function paymentDrawer(id) {
     return h('div', { class: 'stack' },
       h('div', { class: 'detail-hero' }, h('p', { class: 'hero-amount' }, money(p.amount)), badge(p.status),
         p.lateCapture && h('span', { class: 'badge badge-warn' }, 'Late capture')),
-      actions.length && h('div', { class: 'actions' }, actions),
+      actions.length > 0 && h('div', { class: 'actions' }, actions),
       p.lateCapture && h('div', { class: 'alert alert-warn' }, 'The provider captured this payment after it had expired, '
         + 'been cancelled or failed. The money was received; check whether the bill was settled another way.'),
       fields([
@@ -160,7 +160,7 @@ function paymentDrawer(id) {
         ['Expires', ['CREATED', 'PENDING'].includes(p.status) ? dateTime(p.expiresAt) : null],
         ['Captured', p.capturedAt ? dateTime(p.capturedAt) : null],
         p.failureReason && ['Failure', `${p.failureReason}${p.failureCode ? ` (${p.failureCode})` : ''}`],
-        refunds.length && ['Refunded', `${money({ amount: refunded.toFixed(2), currency: p.amount.currency })}`
+        refunds.length > 0 && ['Refunded', `${money({ amount: refunded.toFixed(2), currency: p.amount.currency })}`
           + (inFlight ? ` (+ ${money({ amount: inFlight.toFixed(2), currency: p.amount.currency })} in progress)` : '')],
       ]),
       h('h3', {}, 'Status history'),

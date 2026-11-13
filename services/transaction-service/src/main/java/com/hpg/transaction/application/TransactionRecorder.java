@@ -2,6 +2,9 @@ package com.hpg.transaction.application;
 
 import com.hpg.common.id.Ids;
 import com.hpg.common.money.Money;
+import com.hpg.events.Topics;
+import com.hpg.events.ledger.TransactionCreatedPayload;
+import com.hpg.messaging.outbox.OutboxWriter;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
 import com.hpg.messaging.consumer.EventMessage;
@@ -40,14 +43,16 @@ public class TransactionRecorder {
     private final TransactionTimeline timeline;
     private final LedgerStore ledger;
     private final MeterRegistry meters;
+    private final OutboxWriter outbox;
     private final Clock clock;
 
     public TransactionRecorder(TransactionRepository transactions, TransactionTimeline timeline, LedgerStore ledger,
-            MeterRegistry meters, Clock clock) {
+            MeterRegistry meters, OutboxWriter outbox, Clock clock) {
         this.transactions = transactions;
         this.timeline = timeline;
         this.ledger = ledger;
         this.meters = meters;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -70,6 +75,7 @@ public class TransactionRecorder {
             if (ledger.post(event.eventId(), txn.getId(), PostingRules.PostingType.CAPTURE,
                     PostingRules.capture(p.merchantId(), p.amount()), clock.instant())) {
                 meters.counter("ledger.postings", "type", "CAPTURE").increment();
+                publishCreated(txn, event.eventId());
             }
         }
     }
@@ -101,8 +107,22 @@ public class TransactionRecorder {
             if (ledger.post(event.eventId(), txn.getId(), PostingRules.PostingType.REFUND,
                     PostingRules.refund(r.merchantId(), r.amount()), clock.instant())) {
                 meters.counter("ledger.postings", "type", "REFUND").increment();
+                publishCreated(txn, event.eventId());
             }
         }
+    }
+
+    /**
+     * Money was booked: tell reconciliation (ledger.events.v1, keyed by payment so a payment's capture and
+     * refunds stay ordered). Written in the same transaction as the posting, through the outbox.
+     */
+    private void publishCreated(Transaction txn, java.util.UUID causationEventId) {
+        TransactionCreatedPayload payload = new TransactionCreatedPayload(txn.getTransactionRef(), txn.getId(),
+                txn.getMerchantId(), txn.getType().name(), txn.getPaymentId(), txn.getRefundId(), txn.getProvider(),
+                txn.getProviderReference(), txn.amount(), clock.instant());
+        outbox.append(Topics.LEDGER_EVENTS, txn.getPaymentId().toString(), "Transaction", txn.getId().toString(), 1,
+                txn.getMerchantId(), TransactionCreatedPayload.EVENT_TYPE, TransactionCreatedPayload.CURRENT_VERSION,
+                causationEventId.toString(), payload);
     }
 
     private Transaction upsert(Transaction existing, TransactionType type, UUID merchantId, UUID paymentId,

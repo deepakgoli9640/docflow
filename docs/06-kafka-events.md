@@ -17,7 +17,7 @@
 |---|---|---|---|---|
 | `payment.events.v1` | `paymentId` | 3 / 12 | 7 d | payment-service |
 | `refund.events.v1` | `paymentId` | 3 / 12 | 7 d | refund-service |
-| `ledger.events.v1` | `paymentId` | 3 / 6 | 7 d | transaction-service (not yet published) |
+| `ledger.events.v1` | `paymentId` | 3 / 6 | 7 d | transaction-service (`TransactionCreated`) |
 | `merchant.snapshots.v1` | `merchantId` | 1 / 3 | **compacted** | merchant-service |
 | `reconciliation.events.v1` | `businessDate` | 1 / 1 | 30 d | reconciliation-service |
 | `notification.events.v1` | `notificationId` | 1 / 3 | 7 d | notification-service |
@@ -139,7 +139,7 @@ flowchart LR
 | transaction-service `transaction-refunds` ✅ | refund.events.v1 | history, status, refund postings (waits for the capture) | **blocking** |
 | notification-service `notification-payments` / `notification-refunds` ✅ | payment / refund events | create notification rows (delivery is a separate DB-driven dispatcher with its own retries) | blocking (intake is local and fast) |
 | notification-service `notification-merchant-replica` *(not built)* | merchant.snapshots.v1 | — webhook config is fetched from merchant-service instead (cached 60 s) | — |
-| reconciliation-service `recon-internal-txns` *(Phase 6)* | ledger.events.v1 | `internal_transactions` | blocking |
+| reconciliation-service `recon-internal-txns` ✅ | ledger.events.v1 | `internal_transactions` (idempotent on `transaction_ref`) | blocking |
 
 Implemented consumers use **separate consumer groups per topic** (D42) and record their dedupe markers in
 `processed_events` under that group name.

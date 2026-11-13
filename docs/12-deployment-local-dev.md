@@ -33,7 +33,7 @@ startup and less memory — fine locally, not for load tests or production.)
 | `transactions` | transaction-service (history, status, ledger) |
 | `dashboard` | web dashboard for hospitals and operations on :8090 (nginx, ~5 MB) |
 | `notify` | notification-service, mailpit |
-| `recon` | reconciliation-service |
+| `recon` | reconciliation-service (local: settlement window 0 days, so missing items show at once) |
 | `obs` | prometheus, grafana, jaeger |
 | `tools` | kafka-ui (optional, ~250 MB) |
 
