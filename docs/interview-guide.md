@@ -17,7 +17,7 @@ here has a test or a document behind it.
 > state machine converges on what the provider confirms, events go through a transactional outbox to Kafka
 > so a database change and its event can never disagree, consumers deduplicate, and reconciliation catches
 > whatever still slips through. It has tenant isolation, PII masking, metrics, alerts and distributed traces
-> across HTTP and Kafka, about 1,000 tests against real Postgres and Kafka in containers, and I load-tested it."
+> across HTTP and Kafka, about 550 tests (85 % line coverage) against real Postgres and Kafka in containers, and I load-tested it."
 
 Then offer a deep dive: *"Happy to go into idempotency, the outbox, the ledger or reconciliation."*
 
