@@ -65,12 +65,12 @@ export const humanize = (s) => {
 
 // ---------- status badges
 const TONES = {
-  good: ['CAPTURED', 'COMPLETED', 'DELIVERED', 'ACTIVE', 'APPLIED', 'MATCHED', 'RESOLVED'],
+  good: ['CAPTURED', 'COMPLETED', 'DELIVERED', 'ACTIVE', 'APPLIED', 'MATCHED', 'RESOLVED', 'WON'],
   warn: ['PENDING', 'PROCESSING', 'AUTHORIZED', 'UNKNOWN', 'CREATED', 'INITIATED', 'PENDING_ACTIVATION', 'RETRY',
-    'RUNNING', 'OPEN', 'IN_REVIEW', 'DUPLICATE', 'PENDING_REVIEW'],
+    'RUNNING', 'OPEN', 'IN_REVIEW', 'UNDER_REVIEW', 'DUPLICATE', 'PENDING_REVIEW'],
   bad: ['FAILED', 'DEAD', 'SUSPENDED', 'DEACTIVATED', 'EXPIRED', 'MISMATCHED', 'MISSING_IN_PROVIDER',
-    'MISSING_IN_INTERNAL_SYSTEM'],
-  muted: ['CANCELLED', 'SKIPPED', 'REVOKED'],
+    'MISSING_IN_INTERNAL_SYSTEM', 'LOST'],
+  muted: ['CANCELLED', 'SKIPPED', 'REVOKED', 'CLOSED'],
 };
 export function badge(status) {
   const tone = Object.entries(TONES).find(([, list]) => list.includes(status))?.[0] || 'muted';

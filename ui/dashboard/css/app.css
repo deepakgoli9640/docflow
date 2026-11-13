@@ -264,3 +264,4 @@ label.inline { display: inline-flex; gap: .4rem; align-items: center; }
 .sso { display: grid; gap: 12px; margin-bottom: 4px; }
 .sso:empty { display: none; }
 .sso .divider { text-align: center; margin: 4px 0 0; }
+.text-bad { color: var(--bad); font-weight: 600; }

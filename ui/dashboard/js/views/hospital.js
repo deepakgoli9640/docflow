@@ -278,6 +278,82 @@ function refundDialog({ paymentId, amount, max, currency = 'INR' }, onDone) {
   }, { submitLabel: 'Refund', intro: 'The refund goes back to the patient\'s original payment method.' });
 }
 
+// ============================================================ Disputes
+const DISPUTE_STATUSES = ['OPEN', 'UNDER_REVIEW', 'WON', 'LOST', 'CLOSED'];
+
+function respondByCell(d) {
+  if (!d.respondBy || d.status !== 'OPEN') return '—';
+  const days = Math.ceil((new Date(d.respondBy) - Date.now()) / 86_400_000);
+  return h('span', { title: dateTime(d.respondBy), class: days <= 2 ? 'text-bad' : undefined },
+    days < 0 ? 'Overdue' : days === 0 ? 'Today' : `${days} day${days === 1 ? '' : 's'} left`);
+}
+
+function disputesTable(rows, reload) {
+  return table([
+    { label: 'Opened', value: (d) => h('span', { title: dateTime(d.createdAt) }, relative(d.createdAt)) },
+    { label: 'Amount', value: (d) => money(d.amount), class: 'num' },
+    { label: 'Status', value: (d) => badge(d.status) },
+    { label: 'Respond by', value: respondByCell },
+    { label: 'Reason', value: (d) => humanize(d.reasonCode || '') || '—' },
+    { label: 'Payment', value: (d) => h('code', {}, shortId(d.paymentId)) },
+  ], rows, { onRowClick: (d) => disputeDrawer(d.id, reload), empty: 'No disputes. Chargebacks raised by patients\' banks appear here.' });
+}
+
+export async function disputes(main, params) {
+  let reload;
+  reload = await listPage(main, {
+    header: pageHeader('Disputes', 'Chargebacks raised by patients\' banks. Accept or contest each one before its deadline.'),
+    filters: {
+      initial: { status: params.get('status') || '' },
+      controls: (state, set) => [select('status', [...all('All statuses'), ...opts(DISPUTE_STATUSES)], state.status, set('status'), 'Status')],
+    },
+    load: async (s) => {
+      const rows = await get('/api/v1/disputes', { status: s.status, limit: 200 });
+      return { content: rows, page: { number: 0, size: rows.length, totalElements: rows.length, totalPages: 1 } };
+    },
+    render: (rows) => disputesTable(rows, () => reload()),
+  });
+}
+
+function disputeDrawer(id, onChange) {
+  drawer('Dispute', async (ctx) => {
+    const d = await get(`/api/v1/disputes/${id}`);
+    const act = async (path, body, message) => {
+      await api(`/api/v1/disputes/${id}/${path}`, { method: 'POST', body });
+      toast(message);
+      ctx.close();
+      onChange?.();
+    };
+    const open = d.status === 'OPEN' && !d.merchantResponse;
+    return h('div', { class: 'stack' },
+      h('div', { class: 'detail-hero' }, h('p', { class: 'hero-amount' }, money(d.amount)), badge(d.status)),
+      open && h('div', { class: 'alert alert-warn' },
+        `Respond by ${d.respondBy ? dateTime(d.respondBy) : 'the provider\'s deadline'}. Without a response the bank usually decides for the patient.`),
+      Number(d.amountDeducted?.amount) > 0 && h('div', { class: 'alert' },
+        `${money(d.amountDeducted)} has been held back from your settlements while the dispute is open. Refunds of this payment are paused.`),
+      fields([
+        ['Dispute ID', h('code', {}, d.id)],
+        ['Provider reference', d.providerDisputeId],
+        ['Payment', h('a', { href: `#/payments?id=${d.paymentId}`, onClick: () => ctx.close() }, d.paymentId)],
+        ['Reason', humanize(d.reasonCode || '')],
+        ['Phase', humanize(d.phase || '')],
+        ['Your response', d.merchantResponse ? humanize(d.merchantResponse) : null],
+        ['Evidence summary', d.responseSummary],
+        ['Opened', dateTime(d.createdAt)],
+        ['Decided', d.resolvedAt ? dateTime(d.resolvedAt) : null],
+      ]),
+      open && h('div', { class: 'actions' },
+        button('Contest with evidence', () => formDialog('Contest dispute', [
+          { name: 'summary', label: 'Summary of your evidence', type: 'textarea', required: true, maxlength: 4000,
+            hint: 'What was provided, when, and which documents show it (consent form, invoice, discharge summary). No clinical details beyond what is needed.' },
+        ], (v) => act('contest', { summary: v.summary }, 'Dispute contested. The bank will review your evidence.'),
+        { submitLabel: 'Submit to the bank' }), { variant: 'primary' }),
+        button('Accept', () => confirmDialog('Accept dispute',
+          `The patient keeps ${money(d.amount)} and the amount is deducted from your settlements. This cannot be undone.`,
+          () => act('accept', null, 'Dispute accepted.'), { confirmLabel: 'Accept dispute', danger: true }))));
+  });
+}
+
 // ============================================================ Transactions
 export async function transactions(main, params) {
   const toDateInput = (d) => d.toISOString().slice(0, 10);

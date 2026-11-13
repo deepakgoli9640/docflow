@@ -80,12 +80,14 @@ designed but not built.
 | Double-entry ledger: capture/refund postings, append-only + deferred balance triggers, integrity check, balances, summary report | **Real** | Reversals and settlement postings not yet |
 | Hospital webhooks: HMAC-signed (`timestamp.body`), SSRF guard at delivery, retries with backoff + jitter, DEAD + `NotificationFailed` | **Real** | notification-service |
 | Patient emails (receipt / failed / expired) via SMTP | **Real** | Mailpit locally; addresses encrypted at rest |
-| SMS | **Not yet** | |
+| Patient SMS (receipt, failed, expired), phone encrypted at rest | **Real** | Local provider logs a masked number; MSG91 adapter (DLT templates) tested against WireMock only |
 | Web dashboard: hospital view (payments, refunds, transactions, notifications, settings) and operations view (hospitals, failed notifications, ledger) | **Real** | `ui/dashboard`, Compose profile `dashboard`; browser-tested end to end. Sign-in uses client credentials (production would add OIDC user login) |
 | Ledger events (`TransactionCreated` on `ledger.events.v1`) for every capture and refund posting | **Real** | transaction-service, through its outbox |
 | Reconciliation: internal replica from ledger events, streaming CSV upload (SHA-256 dedupe, malformed-row capture), matching engine (all statuses incl. cross-day duplicates), batches, discrepancy workflow, daily report JSON/CSV, `ReconciliationCompleted` | **Real** | reconciliation-service; dashboard page for OPS |
 | Reconciliation from the Razorpay settlement API (scheduled 06:00 IST + on demand) | **Real code, tested against WireMock only** | Needs Razorpay keys; with the simulated provider use CSV uploads |
-| Settlement postings to the ledger, finance email on `ReconciliationCompleted` | **Not yet** | |
+| Settlement postings to the ledger (net to `SETTLEMENT_BANK`, fees to `PROVIDER_FEES`, once per payment) | **Real** | reconciliation `SettlementConfirmed` → transaction-service |
+| Disputes / chargebacks: Razorpay `payment.dispute.*` webhooks, hospital accept/contest (API + dashboard), chargeback and reversal postings, refunds paused while open, hospital webhooks | **Real** | Razorpay dispute endpoints tested against WireMock only |
+| Finance email on `ReconciliationCompleted` | **Not yet** | |
 | Tenant isolation and role matrix across every service, through the gateway | **Real** | `scripts/smoke-test-phase7.sh` (41 checks) plus per-service integration tests |
 | Structured JSON logs (ECS) with trace id, span id, correlation id; PII masking (emails, phones, card numbers, credentials) | **Real** | `platform/observability`; masking applies to structured (JSON) logs only |
 | Metrics: payments, refunds, provider outcomes, outbox backlog, DLT records, stuck payments, ledger integrity, webhook signature failures | **Real** | Prometheus scrape of every service and the gateway |

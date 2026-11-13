@@ -239,6 +239,37 @@ Four parts, in order: Kubernetes + HA, production security, business features, a
   - a TLS map per hop in [09 §8](09-security.md).
 - Not done: service-mesh mTLS between services, a penetration test.
 
+### 9c — Business features ✅ done
+- **Settlement postings:**
+  - reconciliation publishes `SettlementConfirmed` for each MATCHED payment;
+  - the ledger books net to `SETTLEMENT_BANK`, fee and tax to `PROVIDER_FEES`, out of `PROVIDER_CLEARING`;
+  - it books once per payment, even if a later report lists the payment again.
+- **Disputes (chargebacks):**
+  - Razorpay `payment.dispute.*` webhooks arrive on the existing signed endpoint and are stored in a
+    `disputes` table;
+  - the status moves forward only: OPEN → UNDER_REVIEW → WON/LOST/CLOSED;
+  - money follows what the provider actually did (`DisputeFundsDeducted` / `DisputeFundsReinstated` on
+    `dispute.events.v1`) and becomes `CHARGEBACK` / `CHARGEBACK_REVERSAL` postings;
+  - refunds are refused (`PAYMENT_DISPUTED`) while a dispute is open;
+  - the hospital gets webhooks for every step and can accept or contest (with an evidence summary) by API or
+    on the dashboard's Disputes page.
+- **Patient SMS:**
+  - receipt, failed and expired messages next to email, with the phone number encrypted at rest;
+  - the `log` provider is used locally (number masked);
+  - MSG91 Flow API with DLT-registered templates in production.
+- **Tests:**
+  - payment-service: dispute lifecycle;
+  - transaction-service: postings for chargebacks and settlements;
+  - refund-service: refunds blocked while a dispute is open;
+  - notification-service: dispute webhooks and SMS;
+  - the MSG91 adapter;
+  - `scripts/smoke-test-phase9.sh` end to end.
+- **Not built:**
+  - evidence document upload (Razorpay's Documents API);
+  - automatic acceptance at the deadline (deliberately left out: a person decides);
+  - an OPS-wide disputes view;
+  - finance email.
+
 ## Testing approach used throughout
 
 | Level | Tools | Notes |

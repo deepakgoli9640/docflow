@@ -13,6 +13,7 @@ const NAV = {
     ['overview', 'Overview', hospital.overview],
     ['payments', 'Payments', hospital.payments],
     ['refunds', 'Refunds', hospital.refunds],
+    ['disputes', 'Disputes', hospital.disputes],
     ['transactions', 'Transactions', hospital.transactions],
     ['notifications', 'Notifications', hospital.notifications],
     ['settings', 'Settings', hospital.settings],
