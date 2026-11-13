@@ -101,6 +101,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) {
+        if (isConnectionFailure(ex)) {
+            // A pooled connection that died with the database surfaces as whatever the failing call threw
+            // (e.g. JpaSystemException "Unable to rollback"): still an outage, not a bug.
+            return handleDatabaseUnavailable(ex);
+        }
         log.error("Unexpected error", ex);
         return respond(ProblemDetails.of(CommonErrorCode.INTERNAL_ERROR,
                 "An unexpected error occurred. Quote the correlationId when contacting support."));
@@ -171,5 +176,35 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static ResponseEntity<ProblemDetail> respond(ProblemDetail problem) {
         return ResponseEntity.status(problem.getStatus()).body(problem);
+    }
+
+    /**
+     * True if the cause chain shows the database (or another dependency) could not be reached: JDBC SQLState
+     * class 08 (connection exception), a transient/recoverable connection SQLException, or a socket error.
+     */
+    static boolean isConnectionFailure(Throwable ex) {
+        int depth = 0;
+        for (Throwable t = ex; t != null && depth < 20; t = t.getCause(), depth++) {
+            if (t instanceof java.sql.SQLTransientConnectionException
+                    || t instanceof java.sql.SQLNonTransientConnectionException
+                    || t instanceof java.sql.SQLRecoverableException
+                    || t instanceof java.net.ConnectException
+                    || t instanceof java.net.SocketException) {
+                return true;
+            }
+            if (t instanceof java.sql.SQLException sql && sql.getSQLState() != null && sql.getSQLState().startsWith("08")) {
+                return true;
+            }
+            // HikariCP evicts a connection after a fatal (08xxx) error and closes its proxy; the transaction's
+            // rollback then fails with "Connection is closed" (no SQLState) and Spring reports that instead of
+            // the original error. Seen in DatabaseDownIT.
+            if (t instanceof java.sql.SQLException sql && "Connection is closed".equals(sql.getMessage())) {
+                return true;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
     }
 }

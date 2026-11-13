@@ -176,7 +176,24 @@ Planned:
 - Structured JSON logging, Micrometer custom metrics, OpenTelemetry tracing across HTTP and Kafka,
   `obs` profile with Prometheus, Grafana dashboards-as-code, Jaeger, alert rules.
 
-## Phase 8 — Tests, Docker, CI/CD, failure and load testing
+## Phase 8 — Tests, Docker, CI/CD, failure and load testing ✅ done
+
+Delivered, with these differences:
+- Failure scenarios: the two missing tests were added, `OutboxSurvivesKafkaOutageIT` (pauses Kafka) and
+  `DatabaseDownIT` (stops Postgres, on a fixed host port so it comes back on the same address). The latter
+  found a bug (database outage answered 500), fixed in the shared exception handler. The full map is in
+  [11](11-failure-scenarios.md).
+- Dockerfiles, Compose profiles and `.env.example` already existed from earlier phases.
+- CI: JaCoCo coverage (unit + integration tests in one report per module, summarised in the job summary),
+  a gitleaks secret scan, and images for the 7 services and the dashboard pushed to GHCR on master
+  (`ghcr.io/<owner>/hpg-<name>:<sha>` and `:latest`). The jars are built once, in the test job.
+- Load testing: a k6 script and a JDK-only runner of the same scenario (no install needed); measured in
+  [load-test-report.md](load-test-report.md). k6 itself was not run in the build environment.
+- [interview-guide.md](interview-guide.md), reconciliation HTTP samples, final README.
+- Not built: Alertmanager routing, local TLS, a Kubernetes deployment.
+
+Planned:
+
 
 - Fill test gaps so every scenario in [11](11-failure-scenarios.md) has an automated test.
 - Dockerfiles for all services, full Compose profiles, `.env.example`.

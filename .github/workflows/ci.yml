@@ -1,5 +1,5 @@
-# Build and test every module on each push and pull request.
-# Phase 8 extends this with coverage reports, secret scanning and Docker image publishing.
+# CI: build and test every module on each push and pull request, report coverage, scan for secrets,
+# and on master publish one Docker image per service to GitHub Container Registry (ghcr.io).
 name: CI
 
 on:
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -28,12 +28,16 @@ jobs:
           java-version: "21"
           cache: maven
 
-      # Unit tests (surefire) + Testcontainers integration tests (failsafe).
+      # Unit tests (surefire) + Testcontainers integration tests (failsafe) + JaCoCo reports.
       # GitHub-hosted Ubuntu runners include Docker, which Testcontainers needs.
       - name: Build and test
         run: ./mvnw -B -ntp verify
 
-      - name: Upload test reports
+      - name: Coverage summary
+        if: always()
+        run: python3 scripts/ci/coverage-summary.py >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test and coverage reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -41,4 +45,76 @@ jobs:
           path: |
             **/target/surefire-reports/
             **/target/failsafe-reports/
+            **/target/site/jacoco/
           retention-days: 7
+
+      # The images package these jars (see each service's Dockerfile); built once, here.
+      - name: Keep service jars for the image job
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-jars
+          path: services/*/target/*.jar
+          retention-days: 1
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks scans the commits of the push / pull request
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  images:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [build, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        component:
+          - services/api-gateway
+          - services/merchant-service
+          - services/payment-service
+          - services/refund-service
+          - services/transaction-service
+          - services/notification-service
+          - services/reconciliation-service
+          - ui/dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        if: startsWith(matrix.component, 'services/')
+        with:
+          name: service-jars
+          path: services
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          owner=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/${owner}/hpg-$(basename "$COMPONENT")"
+          docker build \
+            --label org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}" \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            -t "${image}:${GITHUB_SHA::12}" -t "${image}:latest" "$COMPONENT"
+          docker push "${image}:${GITHUB_SHA::12}"
+          docker push "${image}:latest"
+          echo "Pushed ${image}:${GITHUB_SHA::12}" >> "$GITHUB_STEP_SUMMARY"
