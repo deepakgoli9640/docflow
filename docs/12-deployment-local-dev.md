@@ -31,6 +31,7 @@ startup and less memory — fine locally, not for load tests or production.)
 | `core` | api-gateway, merchant-service, payment-service |
 | `refund` | refund-service |
 | `transactions` | transaction-service (history, status, ledger) |
+| `dashboard` | web dashboard for hospitals and operations on :8090 (nginx, ~5 MB) |
 | `notify` | notification-service, mailpit |
 | `recon` | reconciliation-service |
 | `obs` | prometheus, grafana, jaeger |

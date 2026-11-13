@@ -1,5 +1,8 @@
 package com.hpg.merchant.api;
 
+import com.hpg.merchant.api.dto.ConfigurationResponse;
+import com.hpg.merchant.application.MerchantConfigurationService;
+
 import com.hpg.merchant.api.dto.MerchantResponse;
 import com.hpg.merchant.api.dto.StatusChangeRequest;
 import com.hpg.merchant.application.MerchantOnboardingService;
@@ -31,9 +34,11 @@ public class MerchantAdminController {
     private static final Set<String> SORTABLE = Set.of("createdAt", "updatedAt", "legalName", "status");
 
     private final MerchantOnboardingService onboarding;
+    private final MerchantConfigurationService configurations;
 
-    public MerchantAdminController(MerchantOnboardingService onboarding) {
+    public MerchantAdminController(MerchantOnboardingService onboarding, MerchantConfigurationService configurations) {
         this.onboarding = onboarding;
+        this.configurations = configurations;
     }
 
     @GetMapping
@@ -48,6 +53,12 @@ public class MerchantAdminController {
     @Operation(summary = "Get a merchant")
     public MerchantResponse get(@PathVariable UUID merchantId) {
         return MerchantResponse.from(onboarding.get(merchantId));
+    }
+
+    @GetMapping("/{merchantId}/configuration")
+    @Operation(summary = "Get a merchant's payment configuration", description = "Never includes the webhook secret.")
+    public ConfigurationResponse configuration(@PathVariable UUID merchantId) {
+        return ConfigurationResponse.from(configurations.getForOps(merchantId));
     }
 
     @PostMapping("/{merchantId}/activate")

@@ -223,8 +223,19 @@ class NotificationFlowIT {
         assertThat(outbox.findByAggregateIdOrderByIdAsc(n.getId().toString()))
                 .extracting(OutboxEvent::getEventType).containsExactly("NotificationFailed");
 
-        mvc.perform(post("/api/v1/admin/notifications/{id}/retry", n.getId())
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OPS"))))
+        // OPS finds it across merchants, reads its attempts, and re-queues it.
+        var ops = jwt().authorities(new SimpleGrantedAuthority("ROLE_OPS"));
+        mvc.perform(get("/api/v1/admin/notifications").param("status", "DEAD").param("merchantId", merchantId.toString())
+                        .with(ops))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(n.getId().toString()))
+                .andExpect(jsonPath("$.content[0].merchantId").value(merchantId.toString()));
+        mvc.perform(get("/api/v1/admin/notifications/{id}", n.getId()).with(ops))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptLog.length()").value(3));
+        mvc.perform(get("/api/v1/admin/notifications").with(merchant()))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/admin/notifications/{id}/retry", n.getId()).with(ops))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"));
         mvc.perform(post("/api/v1/admin/notifications/{id}/retry", n.getId()).with(merchant()))

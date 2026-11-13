@@ -19,6 +19,9 @@ PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 >        payment- and refund-service talk to the external payment provider (Razorpay).
 > ```
 >
+> A **web dashboard** for hospitals and for your operations team runs on http://localhost:8090
+> ([ui/dashboard](ui/dashboard/README.md)).
+>
 > The Razorpay adapters are tested against WireMock; they have **not yet run against the real sandbox**
 > (no test keys), so local demos use a clearly labelled simulated provider. See
 > [what is implemented](docs/README.md#implemented-vs-simulated) and the
@@ -44,6 +47,7 @@ services/payment-service/    Payments, state machine, idempotency, Razorpay adap
 services/refund-service/     Full/partial refunds, atomic refundable-amount reservation, refund webhooks, recovery
 services/transaction-service/ Transaction history and status, double-entry ledger, summary reports
 services/notification-service/ Signed hospital webhooks and patient emails, retried with backoff
+ui/dashboard/                Web dashboard for hospitals and operations (static files + nginx, no build step)
 deploy/docker-compose.yml    Local environment, split into profiles
 deploy/postgres/init/        One database + one locked-down user per service
 deploy/env/.env.example      Every setting/secret the stack reads (copy via scripts/init-env.sh)
@@ -70,7 +74,8 @@ docs/                        Architecture documentation
 # 3a. Run everything in Docker (~2.1 GB RAM in total, measured)
 ./mvnw -DskipTests package
 docker compose -f deploy/docker-compose.yml --profile infra --profile core \
-  --profile refund --profile transactions --profile notify up -d --build
+  --profile refund --profile transactions --profile notify --profile dashboard up -d --build
+./scripts/seed-demo-data.sh       # optional: demo data + sign-in details for the dashboard
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
 docker compose -f deploy/docker-compose.yml --profile infra up -d
@@ -90,6 +95,7 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | URL | What |
 |---|---|
 | http://localhost:8080 | API gateway (the only entry point clients use) |
+| http://localhost:8090 | Dashboard for hospitals and operations |
 | http://localhost:8081/swagger-ui.html | merchant-service OpenAPI / Swagger UI |
 | http://localhost:8082/swagger-ui.html | payment-service OpenAPI / Swagger UI |
 | http://localhost:8083/swagger-ui.html | refund-service OpenAPI / Swagger UI |

@@ -50,9 +50,33 @@ public class NotificationQueryService {
         return notifications.findAll(spec, pageable);
     }
 
+    /** OPS: notifications across all merchants, e.g. every DEAD one. */
+    @Transactional(readOnly = true)
+    public Page<Notification> listAll(UUID merchantId, NotificationStatus status, Channel channel, Pageable pageable) {
+        Specification<Notification> spec = (root, q, cb) -> cb.conjunction();
+        if (merchantId != null) {
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("merchantId"), merchantId));
+        }
+        if (status != null) {
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("status"), status));
+        }
+        if (channel != null) {
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("channel"), channel));
+        }
+        return notifications.findAll(spec, pageable);
+    }
+
     @Transactional(readOnly = true)
     public Details get(UUID merchantId, UUID id) {
         Notification n = notifications.findByIdAndMerchantId(id, merchantId).orElseThrow(() ->
+                new NotFoundException(NotificationErrorCode.NOTIFICATION_NOT_FOUND, "Notification " + id + " not found"));
+        return new Details(n, store.attemptsOf(id));
+    }
+
+    /** OPS: any notification with its attempts. */
+    @Transactional(readOnly = true)
+    public Details getAny(UUID id) {
+        Notification n = notifications.findById(id).orElseThrow(() ->
                 new NotFoundException(NotificationErrorCode.NOTIFICATION_NOT_FOUND, "Notification " + id + " not found"));
         return new Details(n, store.attemptsOf(id));
     }

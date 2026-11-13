@@ -52,6 +52,24 @@ public class NotificationController {
         return NotificationResponse.of(d.notification(), d.attempts());
     }
 
+    @GetMapping("/api/v1/admin/notifications")
+    @Operation(summary = "OPS: notifications across merchants", description = "Filters: merchantId, status, channel.")
+    public PageResponse<NotificationResponse> listAll(@RequestParam(required = false) UUID merchantId,
+            @RequestParam(required = false) NotificationStatus status,
+            @RequestParam(required = false) Channel channel,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        SortValidator.requireAllowed(pageable, SORTABLE);
+        return PageResponse.from(notifications.listAll(merchantId, status, channel, pageable),
+                NotificationResponse::summary);
+    }
+
+    @GetMapping("/api/v1/admin/notifications/{id}")
+    @Operation(summary = "OPS: one notification with its delivery attempts")
+    public NotificationResponse getAny(@PathVariable UUID id) {
+        var d = notifications.getAny(id);
+        return NotificationResponse.of(d.notification(), d.attempts());
+    }
+
     @PostMapping("/api/v1/admin/notifications/{id}/retry")
     @Operation(summary = "OPS: re-queue a DEAD notification")
     public NotificationResponse retry(@PathVariable UUID id) {

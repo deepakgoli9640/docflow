@@ -4,6 +4,7 @@
 #   docker compose -f deploy/docker-compose.yml --profile infra up -d                 # Postgres + Redis + Kafka
 #   docker compose -f deploy/docker-compose.yml --profile infra --profile core up -d  # + gateway, merchant, payment
 #   ... --profile refund --profile transactions --profile notify                     # + the other services
+#   ... --profile dashboard                                                          # web dashboard on :8090
 #
 # Prerequisites:  ./scripts/init-env.sh   and   ./mvnw -DskipTests package
 # Observability (Prometheus/Grafana/Jaeger) arrives in Phase 7.
@@ -252,6 +253,20 @@ services:
       start_period: 60s
       retries: 10
     mem_limit: 384m
+
+  dashboard:
+    profiles: [dashboard]
+    build: ../ui/dashboard
+    image: hpg/dashboard:local
+    restart: unless-stopped
+    environment:
+      GATEWAY_URL: http://api-gateway:8080
+    ports:
+      - "127.0.0.1:8090:8090"   # hospital and operations dashboard
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    mem_limit: 32m
 
 volumes:
   postgres-data:

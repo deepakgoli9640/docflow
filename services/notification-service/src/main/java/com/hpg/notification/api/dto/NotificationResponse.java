@@ -11,6 +11,7 @@ import java.util.UUID;
 /** A notification as the hospital sees it. The patient's address is masked; bodies are not exposed. */
 public record NotificationResponse(
         UUID id,
+        UUID merchantId,
         String channel,
         String eventType,
         UUID eventId,
@@ -31,7 +32,7 @@ public record NotificationResponse(
     }
 
     public static NotificationResponse of(Notification n, List<NotificationStore.Attempt> attempts) {
-        return new NotificationResponse(n.getId(), n.getChannel().name(), n.getPublicEventType(), n.getSourceEventId(),
+        return new NotificationResponse(n.getId(), n.getMerchantId(), n.getChannel().name(), n.getPublicEventType(), n.getSourceEventId(),
                 n.getPaymentId(), n.getRefundId(), n.getRecipient() == null ? null : Masking.email(n.getRecipient()),
                 n.getStatus().name(), n.getAttempts(), n.getLastResponseStatus(), n.getLastError(),
                 n.getStatus().name().equals("PENDING") ? n.getNextAttemptAt() : null, n.getDeliveredAt(),

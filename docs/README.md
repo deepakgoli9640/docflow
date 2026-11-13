@@ -78,4 +78,5 @@ designed but not built.
 | Hospital webhooks: HMAC-signed (`timestamp.body`), SSRF guard at delivery, retries with backoff + jitter, DEAD + `NotificationFailed` | **Real** | notification-service |
 | Patient emails (receipt / failed / expired) via SMTP | **Real** | Mailpit locally; addresses encrypted at rest |
 | SMS | **Not yet** | |
+| Web dashboard: hospital view (payments, refunds, transactions, notifications, settings) and operations view (hospitals, failed notifications, ledger) | **Real** | `ui/dashboard`, Compose profile `dashboard`; browser-tested end to end. Sign-in uses client credentials (production would add OIDC user login) |
 | Merchant snapshot replication, gateway deny-list, reconciliation | **Not yet** | Phase 6+ |
