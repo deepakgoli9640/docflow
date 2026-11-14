@@ -84,7 +84,7 @@ refund_blocked() {
 eventually 30 "refund refused while the dispute is open (PAYMENT_DISPUTED)" refund_blocked
 charged() { [[ $(sql transaction_db "SELECT count(*) FROM ledger_entries e JOIN transactions t ON t.id = e.transaction_id WHERE t.payment_id = '$PID' AND e.posting_type = 'CHARGEBACK'") == 2 ]]; }
 eventually 30 "chargeback booked in the ledger" charged
-expect UNDER_REVIEW "$(curl -s -X POST "${AUTH[@]}" -H 'Content-Type: application/json' \
+expect UNDER_REVIEW "$(curl -s -X POST "${AUTH[@]}" -H "Idempotency-Key: $(uuid)" -H 'Content-Type: application/json' \
   -d '{"summary":"Consultation on file, signed consent and invoice attached"}' "$GW/api/v1/disputes/$DID/contest" | jq -r .status)" \
   "hospital contested with evidence"
 expect APPLIED "$(webhook payment.dispute.won won 0)" "dispute won"

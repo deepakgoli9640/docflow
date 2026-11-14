@@ -74,9 +74,12 @@ public class DisputeService {
     private final TransactionTemplate tx;
     private final MeterRegistry meters;
     private final Clock clock;
+    private final IdempotencyService idempotency;
 
     public DisputeService(JdbcTemplate jdbc, PaymentAttemptRepository attempts, PaymentProviders providers,
-            OutboxWriter outbox, TransactionTemplate tx, MeterRegistry meters, Clock clock) {
+            OutboxWriter outbox, TransactionTemplate tx, MeterRegistry meters, Clock clock,
+            IdempotencyService idempotency) {
+        this.idempotency = idempotency;
         this.jdbc = jdbc;
         this.attempts = attempts;
         this.providers = providers;
@@ -174,36 +177,79 @@ public class DisputeService {
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.DISPUTE_NOT_FOUND, "No dispute " + disputeId));
     }
 
-    /** The hospital accepts the dispute (the patient keeps the money). */
-    public Dispute accept(UUID merchantId, UUID disputeId) {
-        Dispute d = requireOpen(merchantId, disputeId);
-        PaymentProvider provider = providers.live();
-        ProviderDispute result = provider.acceptDispute(d.providerDisputeId());   // outside any DB transaction
-        return record(d, result, "ACCEPTED", null);
+    static final String ACCEPT = "dispute-accept";
+    static final String CONTEST = "dispute-contest";
+
+    /** Result of accept / contest; {@code replayed} when an earlier request with the same key answered it. */
+    public record Response(Dispute dispute, boolean replayed) {
     }
 
-    /** The hospital contests the dispute with a summary of its evidence. */
-    public Dispute contest(UUID merchantId, UUID disputeId, String summary) {
-        Dispute d = requireOpen(merchantId, disputeId);
-        PaymentProvider provider = providers.live();
-        ProviderDispute result = provider.contestDispute(d.providerDisputeId(), d.amount(), summary);
-        return record(d, result, "CONTESTED", summary);
-    }
-
-    private Dispute requireOpen(UUID merchantId, UUID disputeId) {
+    /**
+     * The hospital accepts the dispute (the patient keeps the money). Idempotent: the same Idempotency-Key
+     * returns the dispute without asking the provider again, and accepting an already accepted dispute is a
+     * success, not an error.
+     */
+    public Response accept(UUID merchantId, UUID disputeId, String key) {
+        idempotency.requireValidKey(key);
+        String hash = idempotency.hash(Map.of("operation", ACCEPT, "disputeId", disputeId));
+        Optional<Response> replay = replay(merchantId, disputeId, ACCEPT, key, hash);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
         Dispute d = get(merchantId, disputeId);
+        if ("ACCEPTED".equals(d.merchantResponse())) {
+            return recordOnly(merchantId, d, ACCEPT, key, hash);
+        }
+        requireOpen(d);
+        ProviderDispute result = providers.live().acceptDispute(d.providerDisputeId());   // outside any DB transaction
+        return new Response(record(merchantId, d, result, "ACCEPTED", null, ACCEPT, key, hash), false);
+    }
+
+    /**
+     * The hospital contests the dispute with a summary of its evidence. Idempotent like {@link #accept}; the
+     * same summary sent again (with a new key) is a success, a different one after contesting is refused.
+     */
+    public Response contest(UUID merchantId, UUID disputeId, String summary, String key) {
+        idempotency.requireValidKey(key);
+        String hash = idempotency.hash(Map.of("operation", CONTEST, "disputeId", disputeId, "summary", summary));
+        Optional<Response> replay = replay(merchantId, disputeId, CONTEST, key, hash);
+        if (replay.isPresent()) {
+            return replay.get();
+        }
+        Dispute d = get(merchantId, disputeId);
+        if ("CONTESTED".equals(d.merchantResponse()) && summary.equals(d.responseSummary())) {
+            return recordOnly(merchantId, d, CONTEST, key, hash);
+        }
+        requireOpen(d);
+        ProviderDispute result = providers.live().contestDispute(d.providerDisputeId(), d.amount(), summary);
+        return new Response(record(merchantId, d, result, "CONTESTED", summary, CONTEST, key, hash), false);
+    }
+
+    private Optional<Response> replay(UUID merchantId, UUID disputeId, String operation, String key, String hash) {
+        return idempotency.findReplay(merchantId, operation, key, hash)
+                .map(r -> new Response(get(merchantId, disputeId), true));
+    }
+
+    private void requireOpen(Dispute d) {
         if (!d.isOpenForResponse()) {
             throw new BusinessException(PaymentErrorCode.DISPUTE_NOT_OPEN,
                     "Dispute is " + d.status() + (d.merchantResponse() == null ? "" : " and was already " + d.merchantResponse()));
         }
-        return d;
     }
 
-    private Dispute record(Dispute d, ProviderDispute result, String response, String summary) {
+    private Response recordOnly(UUID merchantId, Dispute d, String operation, String key, String hash) {
+        tx.executeWithoutResult(s -> idempotency.record(merchantId, operation, key, hash, d.id(), 200));
+        return new Response(find(d.id()).orElseThrow(), false);
+    }
+
+    /** Applies the provider's answer and stores the key in the same transaction. */
+    private Dispute record(UUID merchantId, Dispute d, ProviderDispute result, String response, String summary,
+            String operation, String key, String hash) {
         return tx.execute(s -> {
             Dispute locked = lock(d.provider(), d.providerDisputeId()).orElseThrow();
             jdbc.update("UPDATE disputes SET merchant_response = ?, response_summary = ? WHERE id = ?", response, summary, d.id());
             apply(locked, result, null, clock.instant());
+            idempotency.record(merchantId, operation, key, hash, d.id(), 200);
             meters.counter("disputes.responses", "response", response).increment();
             return find(d.id()).orElseThrow();
         });
