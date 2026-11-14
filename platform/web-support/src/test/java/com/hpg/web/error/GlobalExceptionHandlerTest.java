@@ -72,6 +72,12 @@ class GlobalExceptionHandlerTest {
                     new java.sql.SQLException("An I/O error occurred while sending to the backend.", "08006"));
         }
 
+        @GetMapping("/statement-timeout")
+        void statementTimeout() {
+            throw new IllegalStateException("query failed",
+                    new java.sql.SQLException("ERROR: canceling statement due to statement timeout", "57014"));
+        }
+
         @GetMapping("/sql-syntax")
         void sqlSyntax() {
             throw new IllegalStateException("bad query", new java.sql.SQLException("syntax error", "42601"));
@@ -139,6 +145,12 @@ class GlobalExceptionHandlerTest {
     @Test
     void connectionExceptionSqlStateIs503() throws Exception {
         mvc.perform(get("/db-io-error")).andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void statementTimeoutIs503() throws Exception {
+        mvc.perform(get("/statement-timeout")).andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "5"));
     }
 
     @Test

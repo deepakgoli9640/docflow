@@ -195,6 +195,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             if (t instanceof java.sql.SQLException sql && sql.getSQLState() != null && sql.getSQLState().startsWith("08")) {
                 return true;
             }
+            // 57014 query_canceled: the statement_timeout fired (a stuck lock or an overloaded database).
+            if (t instanceof java.sql.SQLException sql && "57014".equals(sql.getSQLState())) {
+                return true;
+            }
             // HikariCP evicts a connection after a fatal (08xxx) error and closes its proxy; the transaction's
             // rollback then fails with "Connection is closed" (no SQLState) and Spring reports that instead of
             // the original error. Seen in DatabaseDownIT.

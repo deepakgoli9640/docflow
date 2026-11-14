@@ -17,7 +17,9 @@ public enum CommonErrorCode implements ErrorCode {
     RATE_LIMITED(429, "Too many requests"),
     INTERNAL_ERROR(500, "Internal server error"),
     BAD_GATEWAY(502, "Upstream service failed"),
-    SERVICE_UNAVAILABLE(503, "Service temporarily unavailable");
+    SERVICE_UNAVAILABLE(503, "Service temporarily unavailable"),
+    SERVICE_BUSY(503, "Service is at capacity, retry shortly"),
+    UPSTREAM_TIMEOUT(504, "Upstream service did not answer in time");
 
     private final int httpStatus;
     private final String title;
