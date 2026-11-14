@@ -2,6 +2,9 @@ package com.hpg.payment.api;
 
 import com.hpg.common.money.Money;
 import com.hpg.payment.application.DisputeService;
+import com.hpg.payment.application.IdempotencyService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestHeader;
 import com.hpg.web.security.MerchantPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,15 +64,28 @@ public class DisputeController {
     }
 
     @PostMapping("/{disputeId}/accept")
-    @Operation(summary = "Accept the dispute", description = "The patient keeps the money. 409 DISPUTE_NOT_OPEN if already answered or decided.")
-    public DisputeResponse accept(MerchantPrincipal principal, @PathVariable UUID disputeId) {
-        return DisputeResponse.of(disputes.accept(principal.merchantId(), disputeId));
+    @Operation(summary = "Accept the dispute", description = "The patient keeps the money. Requires Idempotency-Key: "
+            + "a retry with the same key returns the dispute (Idempotent-Replayed: true) without asking the provider "
+            + "again. 409 DISPUTE_NOT_OPEN if it was contested or decided.")
+    public ResponseEntity<DisputeResponse> accept(MerchantPrincipal principal, @PathVariable UUID disputeId,
+            @RequestHeader(value = IdempotencyService.HEADER, required = false) String key) {
+        return respond(disputes.accept(principal.merchantId(), disputeId, key));
     }
 
     @PostMapping("/{disputeId}/contest")
-    @Operation(summary = "Contest the dispute", description = "With a summary of the evidence (treatment given, consent, invoice).")
-    public DisputeResponse contest(MerchantPrincipal principal, @PathVariable UUID disputeId,
+    @Operation(summary = "Contest the dispute", description = "With a summary of the evidence (treatment given, consent, "
+            + "invoice). Requires Idempotency-Key, like accept; the same key with a different summary is 422.")
+    public ResponseEntity<DisputeResponse> contest(MerchantPrincipal principal, @PathVariable UUID disputeId,
+            @RequestHeader(value = IdempotencyService.HEADER, required = false) String key,
             @Valid @RequestBody ContestRequest request) {
-        return DisputeResponse.of(disputes.contest(principal.merchantId(), disputeId, request.summary()));
+        return respond(disputes.contest(principal.merchantId(), disputeId, request.summary(), key));
+    }
+
+    private static ResponseEntity<DisputeResponse> respond(DisputeService.Response r) {
+        ResponseEntity.BodyBuilder ok = ResponseEntity.ok();
+        if (r.replayed()) {
+            ok.header("Idempotent-Replayed", "true");
+        }
+        return ok.body(DisputeResponse.of(r.dispute()));
     }
 }

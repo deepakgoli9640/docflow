@@ -36,6 +36,10 @@ public final class GatewayProblems {
         body.put("timestamp", Instant.now().toString());
         response.setRawStatusCode(code.httpStatus());
         response.getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
+        if (code.httpStatus() == 503 || code.httpStatus() == 504) {
+            // Temporary: tell clients when to retry (with the same Idempotency-Key for writes).
+            response.getHeaders().set("Retry-After", "5");
+        }
         try {
             DataBuffer buffer = response.bufferFactory().wrap(mapper.writeValueAsBytes(body));
             return response.writeWith(Mono.just(buffer));

@@ -6,7 +6,9 @@ public enum TransactionErrorCode implements ErrorCode {
 
     TRANSACTION_NOT_FOUND(404, "Transaction not found"),
     INVALID_ACCOUNT(400, "Unknown ledger account"),
-    INVALID_PERIOD(400, "Invalid reporting period");
+    INVALID_PERIOD(400, "Invalid reporting period"),
+    DEAD_LETTER_NOT_FOUND(404, "Dead letter not found"),
+    DEAD_LETTER_ALREADY_REPLAYED(409, "Dead letter already replayed");
 
     private final int httpStatus;
     private final String title;

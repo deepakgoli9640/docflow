@@ -327,4 +327,74 @@ class ApiGatewayIT {
                 .expectStatus().isEqualTo(502)
                 .expectBody().jsonPath("$.errorCode").isEqualTo("BAD_GATEWAY");
     }
+
+    // ---------------------------------------------------------------- resilience
+
+    @Autowired
+    io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry breakers;
+
+    private static String opsToken() throws Exception {
+        return token(signingKey, ISSUER, List.of("OPS"), Instant.now().plusSeconds(600));
+    }
+
+    @Test
+    void safeReadsAreRetriedOnceTheServiceIsBackButWritesNever() throws Exception {
+        breakers.circuitBreaker("reconciliation-service").reset();
+        String ops = opsToken();
+        MERCHANT_SERVICE.stubFor(get(urlEqualTo("/api/v1/reconciliation/batches")).inScenario("busy")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .willReturn(aResponse().withStatus(503)).willSetStateTo("recovered"));
+        MERCHANT_SERVICE.stubFor(get(urlEqualTo("/api/v1/reconciliation/batches")).inScenario("busy")
+                .whenScenarioStateIs("recovered")
+                .willReturn(aResponse().withHeader("Content-Type", "application/json").withBody("{\"content\":[]}")));
+        client.get().uri("/api/v1/reconciliation/batches").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                .exchange().expectStatus().isOk();
+        MERCHANT_SERVICE.verify(2, getRequestedFor(urlEqualTo("/api/v1/reconciliation/batches")));
+
+        // A write is never repeated by the gateway: the client retries it with its Idempotency-Key.
+        MERCHANT_SERVICE.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(urlEqualTo("/api/v1/reconciliation/runs"))
+                .willReturn(aResponse().withStatus(503)));
+        client.post().uri("/api/v1/reconciliation/runs").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue("{}")
+                .exchange().expectStatus().isEqualTo(503);
+        MERCHANT_SERVICE.verify(1, postRequestedFor(urlEqualTo("/api/v1/reconciliation/runs")));
+    }
+
+    @Test
+    void aFailingServiceTripsItsCircuitBreakerAndOtherServicesAreUnaffected() throws Exception {
+        var breaker = breakers.circuitBreaker("reconciliation-service");
+        breaker.reset();
+        String ops = opsToken();
+        // The service is "down": every connection is dropped (retries included, the breaker sees each failure).
+        MERCHANT_SERVICE.stubFor(get(urlEqualTo("/api/v1/reconciliation/batches/broken"))
+                .willReturn(aResponse().withFault(com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER)));
+        for (int i = 0; i < 10 && breaker.getState() != io.github.resilience4j.circuitbreaker.CircuitBreaker.State.OPEN; i++) {
+            client.get().uri("/api/v1/reconciliation/batches/broken").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                    .exchange().expectStatus().is5xxServerError();
+        }
+        assertThat(breaker.getState()).isEqualTo(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.OPEN);
+
+        // Open: answered at once by the gateway, the service is not called and gets room to recover.
+        client.get().uri("/api/v1/reconciliation/batches/broken").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                .exchange()
+                .expectStatus().isEqualTo(503)
+                .expectHeader().valueEquals("Retry-After", "5")
+                .expectBody().jsonPath("$.errorCode").isEqualTo("SERVICE_UNAVAILABLE");
+        int callsWhileClosed = MERCHANT_SERVICE.findAll(getRequestedFor(urlEqualTo("/api/v1/reconciliation/batches/broken"))).size();
+        client.get().uri("/api/v1/reconciliation/batches/broken").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                .exchange().expectStatus().isEqualTo(503);
+        MERCHANT_SERVICE.verify(callsWhileClosed, getRequestedFor(urlEqualTo("/api/v1/reconciliation/batches/broken")));
+
+        // A service's own error answers are not "down": they pass through unchanged, body included.
+        breaker.reset();
+        MERCHANT_SERVICE.stubFor(get(urlEqualTo("/api/v1/reconciliation/batches/own-error")).willReturn(aResponse()
+                .withStatus(500).withHeader("Content-Type", "application/problem+json").withBody("{\"errorCode\":\"INTERNAL_ERROR\",\"correlationId\":\"c-1\"}")));
+        client.get().uri("/api/v1/reconciliation/batches/own-error").header(HttpHeaders.AUTHORIZATION, "Bearer " + ops)
+                .exchange().expectStatus().isEqualTo(500).expectBody().jsonPath("$.correlationId").isEqualTo("c-1");
+
+        // One service's breaker does not affect the others.
+        client.get().uri("/api/v1/merchants/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + merchantToken())
+                .exchange().expectStatus().isOk();
+        breaker.reset();
+    }
 }

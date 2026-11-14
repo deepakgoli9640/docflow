@@ -788,15 +788,42 @@ class PaymentApiIT {
                     .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath("$.summary"))
                     .willReturn(com.github.tomakehurst.wiremock.client.WireMock.okJson(
                             RazorpayStub.dispute(disp, pay, 2_000_000, 2_000_000, "under_review", respondBy))));
+            String evidence = "{\"summary\":\"Consultation on 12 Nov, signed consent and invoice INV-77 attached\"}";
+            String contestKey = newKey();
             mvc.perform(post("/api/v1/disputes/{id}/contest", id).with(merchant(merchantId))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"summary\":\"Consultation on 12 Nov, signed consent and invoice INV-77 attached\"}"))
+                            .header("Idempotency-Key", contestKey).contentType(MediaType.APPLICATION_JSON).content(evidence))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("UNDER_REVIEW"))
                     .andExpect(jsonPath("$.merchantResponse").value("CONTESTED"));
-            mvc.perform(post("/api/v1/disputes/{id}/accept", id).with(merchant(merchantId)))
+            // The response was lost and the hospital retries with the same key: the same answer, no second
+            // provider call.
+            mvc.perform(post("/api/v1/disputes/{id}/contest", id).with(merchant(merchantId))
+                            .header("Idempotency-Key", contestKey).contentType(MediaType.APPLICATION_JSON).content(evidence))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Idempotent-Replayed", "true"))
+                    .andExpect(jsonPath("$.merchantResponse").value("CONTESTED"));
+            RAZORPAY.verify(1, com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor(
+                    com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/v1/disputes/" + disp + "/contest")));
+            // Same key, different request: a client bug.
+            mvc.perform(post("/api/v1/disputes/{id}/contest", id).with(merchant(merchantId))
+                            .header("Idempotency-Key", contestKey).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"summary\":\"something else\"}"))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_KEY_REUSED"));
+            // The same evidence again under a new key: already done, not an error.
+            mvc.perform(post("/api/v1/disputes/{id}/contest", id).with(merchant(merchantId))
+                            .header("Idempotency-Key", newKey()).contentType(MediaType.APPLICATION_JSON).content(evidence))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.merchantResponse").value("CONTESTED"));
+            RAZORPAY.verify(1, com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor(
+                    com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/v1/disputes/" + disp + "/contest")));
+            // Accepting after contesting is a different decision: refused.
+            mvc.perform(post("/api/v1/disputes/{id}/accept", id).with(merchant(merchantId)).header("Idempotency-Key", newKey()))
                     .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.errorCode").value("DISPUTE_NOT_OPEN"));
+            // Without a key: 400.
+            mvc.perform(post("/api/v1/disputes/{id}/accept", id).with(merchant(merchantId)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errorCode").value("MISSING_IDEMPOTENCY_KEY"));
 
             webhook(RazorpayStub.disputeWebhook("payment.dispute.won", payment,
                     RazorpayStub.dispute(disp, pay, 2_000_000, 0, "won", respondBy), now()))
@@ -836,11 +863,22 @@ class PaymentApiIT {
                             com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/v1/disputes/" + disp + "/accept"))
                     .willReturn(com.github.tomakehurst.wiremock.client.WireMock.okJson(
                             RazorpayStub.dispute(disp, pay, 500_000, 0, "lost", respondBy))));
-            mvc.perform(post("/api/v1/disputes/{id}/accept", onlyDispute().get("id").asText()).with(merchant(merchantId)))
+            String disputeId = onlyDispute().get("id").asText();
+            String acceptKey = newKey();
+            mvc.perform(post("/api/v1/disputes/{id}/accept", disputeId).with(merchant(merchantId)).header("Idempotency-Key", acceptKey))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("LOST"))
                     .andExpect(jsonPath("$.merchantResponse").value("ACCEPTED"))
                     .andExpect(jsonPath("$.amountDeducted.amount").value("5000.00"));
+            mvc.perform(post("/api/v1/disputes/{id}/accept", disputeId).with(merchant(merchantId)).header("Idempotency-Key", acceptKey))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Idempotent-Replayed", "true"))
+                    .andExpect(jsonPath("$.status").value("LOST"));
+            // Accepting again under a new key is "already done", not an error, and calls nobody.
+            mvc.perform(post("/api/v1/disputes/{id}/accept", disputeId).with(merchant(merchantId)).header("Idempotency-Key", newKey()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.merchantResponse").value("ACCEPTED"));
+            RAZORPAY.verify(1, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
+                    com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/v1/disputes/" + disp + "/accept")));
             assertThat(disputeEvents(paymentId)).containsExactly("DisputeOpened", "DisputeFundsDeducted", "DisputeResolved");
             assertThat(moneyMoved(paymentId, "DisputeFundsDeducted")).isEqualTo("5000.00");
         }

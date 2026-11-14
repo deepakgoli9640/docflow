@@ -318,8 +318,11 @@ export async function disputes(main, params) {
 function disputeDrawer(id, onChange) {
   drawer('Dispute', async (ctx) => {
     const d = await get(`/api/v1/disputes/${id}`);
+    // One key per action for the life of this drawer: a double click or a retry after a lost response is answered
+    // from the first request instead of being sent to the bank twice.
+    const keys = { accept: newIdempotencyKey(), contest: newIdempotencyKey() };
     const act = async (path, body, message) => {
-      await api(`/api/v1/disputes/${id}/${path}`, { method: 'POST', body });
+      await api(`/api/v1/disputes/${id}/${path}`, { method: 'POST', body, idempotencyKey: keys[path] });
       toast(message);
       ctx.close();
       onChange?.();

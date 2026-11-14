@@ -96,6 +96,8 @@ docker compose -f deploy/docker-compose.yml --profile infra up -d
 ./scripts/smoke-test-phase4.sh    # payment -> Kafka -> refund, transactions, notifications
 ./scripts/smoke-test-phase6.sh    # ledger -> reconciliation against a settlement CSV
 ./scripts/smoke-test-phase7.sh    # tenant isolation, role matrix, PII-free logs with trace ids
+./scripts/smoke-test-phase9.sh    # SMS, settlement postings, disputes
+./scripts/chaos-test.sh           # kill services / pause Kafka / stop Postgres under load; nothing lost or doubled
 
 # Stop (add -v to also delete the database volume)
 docker compose -f deploy/docker-compose.yml --profile '*' down

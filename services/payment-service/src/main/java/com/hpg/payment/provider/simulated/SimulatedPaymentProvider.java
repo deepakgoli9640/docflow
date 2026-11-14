@@ -28,8 +28,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * <b>SIMULATED</b> payment provider for local demos without Razorpay credentials.
  *
- * <p>Active only with {@code hpg.payment.provider=simulated}. Everything is in memory (lost on restart,
- * single instance only) and no money moves. It exists so the full flow — order, checkout, callback,
+ * <p>Active only with {@code hpg.payment.provider=simulated}. Its orders, payments and disputes live in a
+ * {@link SimulatorStore} (PostgreSQL in the application: shared by replicas, kept across restarts, like a real
+ * provider) and no money moves. It exists so the full flow — order, checkout, callback,
  * capture, recovery polling — can be exercised end to end on a laptop. Automated tests of the real
  * adapter use WireMock instead. Never enable this outside local development.
  */
@@ -41,11 +42,15 @@ public class SimulatedPaymentProvider implements PaymentProvider {
     private static final String SIGNING_KEY = "simulated-provider-signing-key";
 
     private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
-    private final Map<String, SimOrder> orders = new ConcurrentHashMap<>();
-    private final Map<String, ProviderDispute> disputes = new ConcurrentHashMap<>();
-    private final Map<String, ProviderPayment> payments = new ConcurrentHashMap<>();
+    private final SimulatorStore store;
 
+    /** In-memory state, for unit tests. */
     public SimulatedPaymentProvider() {
+        this(SimulatorStore.inMemory());
+    }
+
+    public SimulatedPaymentProvider(SimulatorStore store) {
+        this.store = store;
         log.warn("*** SIMULATED PAYMENT PROVIDER ACTIVE: no real payments are processed. Local development only. ***");
     }
 
@@ -54,7 +59,7 @@ public class SimulatedPaymentProvider implements PaymentProvider {
     public record SimulatedCheckoutResult(String providerOrderId, String providerPaymentId, String signature) {
     }
 
-    private record SimOrder(String id, Money amount, CaptureMode captureMode) {
+    public record SimOrder(String id, Money amount, CaptureMode captureMode) {
     }
 
     @Override
@@ -65,19 +70,19 @@ public class SimulatedPaymentProvider implements PaymentProvider {
     @Override
     public ProviderOrder createOrder(CreateOrderCommand command) {
         String id = "order_sim_" + SecureTokens.alphanumeric(14);
-        orders.put(id, new SimOrder(id, command.amount(), command.captureMode()));
+        store.put("ORDER", id, null, new SimOrder(id, command.amount(), command.captureMode()));
         log.info("SIMULATED provider: created order {}", id);
         return new ProviderOrder(id, command.amount(), "created");
     }
 
     @Override
     public List<ProviderPayment> fetchOrderPayments(String providerOrderId) {
-        return payments.values().stream().filter(p -> providerOrderId.equals(p.providerOrderId())).toList();
+        return store.byRef("PAYMENT", providerOrderId, ProviderPayment.class);
     }
 
     @Override
     public ProviderPayment fetchPayment(String providerPaymentId) {
-        ProviderPayment payment = payments.get(providerPaymentId);
+        ProviderPayment payment = store.get("PAYMENT", providerPaymentId, ProviderPayment.class).orElse(null);
         if (payment == null) {
             throw new ProviderRejectedException("fetchPayment", "BAD_REQUEST_ERROR", "The id provided does not exist");
         }
@@ -94,7 +99,7 @@ public class SimulatedPaymentProvider implements PaymentProvider {
             throw new ProviderRejectedException("capture", "BAD_REQUEST_ERROR", "Payment is not authorized");
         }
         ProviderPayment captured = withStatus(payment, ProviderPaymentStatus.CAPTURED, null, null);
-        payments.put(providerPaymentId, captured);
+        store.put("PAYMENT", providerPaymentId, captured.providerOrderId(), captured);
         return captured;
     }
 
@@ -131,29 +136,27 @@ public class SimulatedPaymentProvider implements PaymentProvider {
 
     @Override
     public ProviderDispute acceptDispute(String providerDisputeId) {
-        return disputes.compute(providerDisputeId, (id, d) -> {
-            if (d == null) {
-                throw new ProviderRejectedException("acceptDispute", "BAD_REQUEST_ERROR", "Unknown dispute");
-            }
-            return new ProviderDispute(id, d.providerPaymentId(), d.amount(), d.amount(), "LOST", d.reasonCode(),
-                    d.phase(), d.respondBy(), d.createdAt());
-        });
+        ProviderDispute d = store.get("DISPUTE", providerDisputeId, ProviderDispute.class).orElseThrow(() ->
+                new ProviderRejectedException("acceptDispute", "BAD_REQUEST_ERROR", "Unknown dispute"));
+        ProviderDispute lost = new ProviderDispute(providerDisputeId, d.providerPaymentId(), d.amount(), d.amount(), "LOST",
+                d.reasonCode(), d.phase(), d.respondBy(), d.createdAt());
+        rememberDispute(lost);
+        return lost;
     }
 
     @Override
     public ProviderDispute contestDispute(String providerDisputeId, Money amount, String summary) {
-        return disputes.compute(providerDisputeId, (id, d) -> {
-            if (d == null) {
-                throw new ProviderRejectedException("contestDispute", "BAD_REQUEST_ERROR", "Unknown dispute");
-            }
-            return new ProviderDispute(id, d.providerPaymentId(), d.amount(), d.amountDeducted(), "UNDER_REVIEW",
-                    d.reasonCode(), d.phase(), d.respondBy(), d.createdAt());
-        });
+        ProviderDispute d = store.get("DISPUTE", providerDisputeId, ProviderDispute.class).orElseThrow(() ->
+                new ProviderRejectedException("contestDispute", "BAD_REQUEST_ERROR", "Unknown dispute"));
+        ProviderDispute review = new ProviderDispute(providerDisputeId, d.providerPaymentId(), d.amount(), d.amountDeducted(),
+                "UNDER_REVIEW", d.reasonCode(), d.phase(), d.respondBy(), d.createdAt());
+        rememberDispute(review);
+        return review;
     }
 
     /** Disputes raised through a simulated webhook, so accept/contest have something to act on. */
     public void rememberDispute(ProviderDispute dispute) {
-        disputes.put(dispute.providerDisputeId(), dispute);
+        store.put("DISPUTE", dispute.providerDisputeId(), dispute.providerPaymentId(), dispute);
     }
 
     @Override
@@ -163,7 +166,7 @@ public class SimulatedPaymentProvider implements PaymentProvider {
 
     /** What a patient paying on the provider's page would cause. Used by the simulated checkout page. */
     public SimulatedCheckoutResult simulatePayment(String providerOrderId, Outcome outcome) {
-        SimOrder order = orders.get(providerOrderId);
+        SimOrder order = store.get("ORDER", providerOrderId, SimOrder.class).orElse(null);
         if (order == null) {
             throw new ProviderRejectedException("simulatePayment", "BAD_REQUEST_ERROR", "Unknown order");
         }
@@ -171,8 +174,8 @@ public class SimulatedPaymentProvider implements PaymentProvider {
         ProviderPaymentStatus status = outcome == Outcome.FAILURE ? ProviderPaymentStatus.FAILED
                 : order.captureMode() == CaptureMode.AUTO ? ProviderPaymentStatus.CAPTURED
                 : ProviderPaymentStatus.AUTHORIZED;
-        payments.put(paymentId, new ProviderPayment(paymentId, providerOrderId, status, order.amount(), "upi",
-                outcome == Outcome.FAILURE ? "BAD_REQUEST_ERROR" : null,
+        store.put("PAYMENT", paymentId, providerOrderId, new ProviderPayment(paymentId, providerOrderId, status,
+                order.amount(), "upi", outcome == Outcome.FAILURE ? "BAD_REQUEST_ERROR" : null,
                 outcome == Outcome.FAILURE ? "Simulated decline" : null));
         log.info("SIMULATED provider: payment {} on order {} -> {}", paymentId, providerOrderId, status);
         return new SimulatedCheckoutResult(providerOrderId, paymentId, sign(providerOrderId, paymentId));

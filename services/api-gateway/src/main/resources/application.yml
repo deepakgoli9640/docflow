@@ -47,6 +47,9 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while merchant-service is failing (resilience4j below)
+                  args:
+                    name: merchant-service
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@ipKeyResolver}"
@@ -61,6 +64,9 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while merchant-service is failing (resilience4j below)
+                  args:
+                    name: merchant-service
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@ipKeyResolver}"
@@ -74,6 +80,21 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while merchant-service is failing (resilience4j below)
+                  args:
+                    name: merchant-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -89,6 +110,21 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while payment-service is failing (resilience4j below)
+                  args:
+                    name: payment-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -102,6 +138,21 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while payment-service is failing (resilience4j below)
+                  args:
+                    name: payment-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@ipKeyResolver}"
@@ -116,6 +167,9 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 64KB
+                - name: CircuitBreaker            # fail fast while payment-service is failing (resilience4j below)
+                  args:
+                    name: payment-service
 
             # --- refund-service ---------------------------------------------------------
             - id: refund-api
@@ -126,6 +180,21 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while refund-service is failing (resilience4j below)
+                  args:
+                    name: refund-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -140,16 +209,34 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 64KB
+                - name: CircuitBreaker            # fail fast while refund-service is failing (resilience4j below)
+                  args:
+                    name: refund-service
 
             # --- transaction-service ----------------------------------------------------
             - id: transaction-api
               uri: ${HPG_TRANSACTION_SERVICE_URI:http://localhost:8084}
               predicates:
-                - Path=/api/v1/transactions,/api/v1/transactions/**,/api/v1/reports/**,/api/v1/admin/ledger/**
+                - Path=/api/v1/transactions,/api/v1/transactions/**,/api/v1/reports/**,/api/v1/admin/ledger/**,/api/v1/admin/dead-letters,/api/v1/admin/dead-letters/**
               filters:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while transaction-service is failing (resilience4j below)
+                  args:
+                    name: transaction-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -165,6 +252,21 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while notification-service is failing (resilience4j below)
+                  args:
+                    name: notification-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -181,6 +283,9 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 21MB
+                - name: CircuitBreaker            # fail fast while reconciliation-service is failing (resilience4j below)
+                  args:
+                    name: reconciliation-service
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -194,6 +299,21 @@ spring:
                 - name: RequestSize
                   args:
                     maxSize: 1MB
+                - name: CircuitBreaker            # fail fast while reconciliation-service is failing (resilience4j below)
+                  args:
+                    name: reconciliation-service
+                - name: Retry                     # safe reads only, on another instance; writes are retried by clients
+                  args:
+                    retries: 2
+                    methods: GET
+                    series: ""
+                    statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE
+                    exceptions: java.io.IOException
+                    backoff:
+                      firstBackoff: 50ms
+                      maxBackoff: 500ms
+                      factor: 2
+                      basedOnPreviousValue: false
                 - name: RequestRateLimiter
                   args:
                     key-resolver: "#{@principalKeyResolver}"
@@ -212,6 +332,29 @@ hpg:
       issuer: ${HPG_OIDC_ISSUER:}
       jwk-set-uri: ${HPG_OIDC_JWK_SET_URI:}
       audience: ${HPG_OIDC_AUDIENCE:hpg-api}
+
+# Circuit breakers (one per downstream service, used by the routes above). They count what says "the service is
+# down or hung": refused or dropped connections and timeouts. A service's own 4xx/5xx answers pass through
+# unchanged (with its problem details). A service failing half of the last 20 calls is skipped for 10 s: callers get 503 at once instead of waiting for timeouts, and the service gets room to
+# recover. The time limit sits above the HTTP client's 10 s response timeout, so that timeout fires first.
+spring.cloud.circuitbreaker.bulkhead.resilience4j.enabled: false   # services shed load themselves (503 SERVICE_BUSY);
+                                                                    # a second limit here only turned busy into 500s
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 12s
 
 management:
   server:

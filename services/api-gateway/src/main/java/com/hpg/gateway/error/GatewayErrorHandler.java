@@ -34,7 +34,17 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         CommonErrorCode code;
         String detail;
-        if (hasCause(ex, ConnectException.class)
+        if (hasCauseNamed(ex, "BulkheadFullException")) {   // only if a gateway bulkhead is ever switched on
+            code = CommonErrorCode.SERVICE_BUSY;
+            detail = "The service is at capacity. Retry in a moment with the same Idempotency-Key.";
+        } else if (ex instanceof org.springframework.cloud.gateway.support.ServiceUnavailableException
+                || hasCause(ex, io.github.resilience4j.circuitbreaker.CallNotPermittedException.class)) {
+            // The service's circuit breaker is open: answered at once, the service gets room to recover.
+            log.warn("Circuit open, failing fast for {}", exchange.getRequest().getPath());
+            code = CommonErrorCode.SERVICE_UNAVAILABLE;
+            detail = "The service is temporarily unavailable (failing fast while it recovers). "
+                    + "Retry later with the same Idempotency-Key.";
+        } else if (hasCause(ex, ConnectException.class)
                 || ex instanceof org.springframework.cloud.gateway.support.NotFoundException) {
             log.warn("Downstream unavailable for {}: {}", exchange.getRequest().getPath(), ex.toString());
             code = CommonErrorCode.SERVICE_UNAVAILABLE;
@@ -55,10 +65,17 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
                 case 413, 400 -> CommonErrorCode.MALFORMED_REQUEST;
                 case 415 -> CommonErrorCode.UNSUPPORTED_MEDIA_TYPE;
                 case 429 -> CommonErrorCode.RATE_LIMITED;
-                case 503 -> CommonErrorCode.SERVICE_UNAVAILABLE;
+                case 503 -> CommonErrorCode.SERVICE_UNAVAILABLE;   // includes an open circuit breaker
+                case 504 -> CommonErrorCode.UPSTREAM_TIMEOUT;      // the circuit breaker's time limit
                 default -> rse.getStatusCode().is4xxClientError() ? CommonErrorCode.CONFLICT : CommonErrorCode.INTERNAL_ERROR;
             };
-            detail = code == CommonErrorCode.NOT_FOUND ? "No API route matches this path." : code.title();
+            detail = switch (code) {
+                case NOT_FOUND -> "No API route matches this path.";
+                case SERVICE_UNAVAILABLE -> "The service is temporarily unavailable (failing fast while it recovers). "
+                        + "Retry later with the same Idempotency-Key.";
+                case UPSTREAM_TIMEOUT -> "The service did not answer in time. Retry later with the same Idempotency-Key.";
+                default -> code.title();
+            };
         } else {
             log.error("Unexpected gateway error for {}", exchange.getRequest().getPath(), ex);
             code = CommonErrorCode.INTERNAL_ERROR;
@@ -70,6 +87,15 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
     private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
             if (type.isInstance(t)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasCauseNamed(Throwable ex, String simpleName) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t.getClass().getSimpleName().equals(simpleName)) {
                 return true;
             }
         }

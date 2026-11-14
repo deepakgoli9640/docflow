@@ -38,6 +38,24 @@ public class WebSupportAutoConfiguration {
         return registration;
     }
 
+    /**
+     * Load shedding (on by default): {@code hpg.web.max-concurrent-requests} at a time per instance, a short wait,
+     * then a fast 503. Size it a few times the database pool: more in flight only queues for connections.
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "hpg.web.load-shedding.enabled",
+            havingValue = "true", matchIfMissing = true)
+    public FilterRegistrationBean<com.hpg.web.resilience.LoadSheddingFilter> loadSheddingFilter(ObjectMapper mapper,
+            org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meters,
+            @org.springframework.beans.factory.annotation.Value("${hpg.web.load-shedding.max-concurrent:40}") int maxConcurrent,
+            @org.springframework.beans.factory.annotation.Value("${hpg.web.load-shedding.max-wait:250ms}") java.time.Duration maxWait) {
+        FilterRegistrationBean<com.hpg.web.resilience.LoadSheddingFilter> registration = new FilterRegistrationBean<>(
+                new com.hpg.web.resilience.LoadSheddingFilter(maxConcurrent, maxWait.toMillis(), mapper, meters.getIfAvailable()));
+        // After the correlation id (so a refusal can be traced), before security (a refused request costs nothing).
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
+        return registration;
+    }
+
     @Bean
     @ConditionalOnMissingBean
     public GlobalExceptionHandler globalExceptionHandler() {

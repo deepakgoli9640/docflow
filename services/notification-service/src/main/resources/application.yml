@@ -11,6 +11,8 @@ spring:
     username: ${NOTIFICATION_DB_USER:notification_app}
     password: ${NOTIFICATION_DB_PASSWORD:}
     hikari:
+      # A statement may run at most this long (a stuck lock or overloaded database); answered 503.
+      connection-init-sql: SET statement_timeout = '${HPG_DB_STATEMENT_TIMEOUT:30s}'
       maximum-pool-size: 10
       connection-timeout: 3000
   jpa:
