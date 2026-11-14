@@ -67,6 +67,13 @@ docs/                        Architecture documentation
 - No local Maven needed — use the wrapper `./mvnw`.
 - Windows: run the scripts from Git Bash or WSL.
 
+## Windows: double-click to run
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then double-click **`start-hpg.bat`**. It
+generates `deploy/env/.env`, builds the services (with your JDK 21 if installed, otherwise inside a Maven
+container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
+http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
+
 ## Quick start
 
 ```bash
