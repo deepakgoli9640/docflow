@@ -72,11 +72,12 @@ if (Get-Command java -ErrorAction SilentlyContinue) {
 }
 if ($javaMajor -ge 21) {
     Write-Host "Using the installed JDK $javaMajor."
-    & cmd /c 'mvnw.cmd -B -q -DskipTests package'
+    & cmd /c 'mvnw.cmd -B -ntp -DskipTests package'
 } else {
     Write-Host 'JDK 21 not found - building inside a Maven container instead.'
+    Write-Host 'First run: downloads the Maven image and all dependencies (often 10-20 minutes). Progress follows.'
     & docker run --rm -v "${root}:/src" -v 'hpg-maven-cache:/root/.m2' -w /src `
-        maven:3.9.9-eclipse-temurin-21 mvn -B -q -DskipTests package
+        maven:3.9.9-eclipse-temurin-21 mvn -B -ntp -DskipTests package
 }
 if ($LASTEXITCODE -ne 0) { Fail 'The build failed. See the messages above.' }
 Write-Host 'Build finished.'
