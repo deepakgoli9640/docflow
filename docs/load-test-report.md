@@ -80,3 +80,25 @@ OPS_SECRET=$(grep '^HPG_OPS_CLIENT_SECRET=' deploy/env/.env | cut -d= -f2-) \
 
 Watch it on Grafana (http://localhost:3000): *HPG Payments* (rate, latency per service, 5xx) and *HPG Event
 pipeline* (outbox backlog, consumer lag).
+
+## After Phase 10: load shedding and gateway circuit breakers
+
+Same scenario, on the two-replica stack (16 JVMs on the same 4 vCPUs, so absolute numbers are lower than above):
+
+| Iterations/s | POST p50 | POST p95 | GET p95 | Result |
+|---:|---:|---:|---:|---|
+| 40 | 37 ms | 105 ms | 45 ms | no errors |
+| 120 (3× capacity) | 1.3 s | 2.8 s | 3.3 s | 52 % created, the rest `503` with `Retry-After`; **no 500s**, nothing half-written |
+
+What changed under overload:
+- **Before:** requests queued until a 3 s database wait gave up. Some were answered `500`/`502`.
+- **Now:** every refusal is a clean `503` the client can retry with the same Idempotency-Key.
+
+Two findings along the way, both fixed:
+- **A hidden gateway bulkhead.** Spring Cloud's circuit-breaker integration adds a bulkhead of 25 concurrent
+  calls per service by default.
+  - Under load it rejected calls with an unmapped exception, so clients got `500`.
+  - Those rejections were counted as failures, which opened the breaker.
+  - It is now disabled: the services shed load themselves.
+- **Latency at 3× capacity is CPU-bound** on this machine; the gateway itself is starved. More capacity
+  (replicas on more nodes) is the fix, not more queueing.

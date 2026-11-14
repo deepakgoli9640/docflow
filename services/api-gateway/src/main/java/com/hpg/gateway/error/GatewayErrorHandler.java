@@ -34,7 +34,10 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         CommonErrorCode code;
         String detail;
-        if (ex instanceof org.springframework.cloud.gateway.support.ServiceUnavailableException
+        if (hasCauseNamed(ex, "BulkheadFullException")) {   // only if a gateway bulkhead is ever switched on
+            code = CommonErrorCode.SERVICE_BUSY;
+            detail = "The service is at capacity. Retry in a moment with the same Idempotency-Key.";
+        } else if (ex instanceof org.springframework.cloud.gateway.support.ServiceUnavailableException
                 || hasCause(ex, io.github.resilience4j.circuitbreaker.CallNotPermittedException.class)) {
             // The service's circuit breaker is open: answered at once, the service gets room to recover.
             log.warn("Circuit open, failing fast for {}", exchange.getRequest().getPath());
@@ -84,6 +87,15 @@ public class GatewayErrorHandler implements ErrorWebExceptionHandler {
     private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
             if (type.isInstance(t)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasCauseNamed(Throwable ex, String simpleName) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t.getClass().getSimpleName().equals(simpleName)) {
                 return true;
             }
         }

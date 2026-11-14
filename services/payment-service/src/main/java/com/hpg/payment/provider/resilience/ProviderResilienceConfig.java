@@ -45,8 +45,9 @@ public class ProviderResilienceConfig {
 
     @Bean
     @ConditionalOnProperty(name = "hpg.payment.provider", havingValue = "simulated")
-    public SimulatedPaymentProvider simulatedPaymentProvider() {
-        return new SimulatedPaymentProvider();
+    public SimulatedPaymentProvider simulatedPaymentProvider(org.springframework.jdbc.core.JdbcTemplate jdbc,
+            com.fasterxml.jackson.databind.ObjectMapper json) {
+        return new SimulatedPaymentProvider(com.hpg.payment.provider.simulated.SimulatorStore.jdbc(jdbc, json));
     }
 
     @Bean

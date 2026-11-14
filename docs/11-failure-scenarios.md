@@ -36,6 +36,17 @@ The planned test names above were the design; these are the tests that exist and
 `DatabaseDownIT` found a real bug: a stopped database surfaced as "Unable to rollback" on a dead pooled
 connection and was answered `500`. Connection failures anywhere in the cause chain are now `503`.
 
+### Beyond the ten scenarios (Phase 10: resilience between services)
+
+| Failure | Mechanism | Proof |
+|---|---|---|
+| A service is overloaded | Load shedding in every service: at most 40 requests in flight per instance, then `503 SERVICE_BUSY` + `Retry-After` within 250 ms, before any work (health checks never shed) | `LoadSheddingFilterTest`; load test: no 500s at 3× capacity |
+| A service is down or hangs | Gateway circuit breaker per service: half of the last 20 calls failed (refused, dropped, timed out) → fail fast with 503 for 10 s, then probe. A service's own error answers pass through unchanged | `ApiGatewayIT#aFailingServiceTripsItsCircuitBreaker…` |
+| A replica dies mid-request | Gateway retries GETs on connection errors and 502/503 (another replica); writes are never repeated by the gateway, clients retry them with their Idempotency-Key | `ApiGatewayIT#safeReadsAreRetried…`; chaos test |
+| A query hangs (lock, overloaded database) | Postgres `statement_timeout` (30 s) on every connection; a cancelled statement is `503` | `GlobalExceptionHandlerTest#statementTimeoutIs503` |
+| An event fails every retry | Dead-letter topic, then inspection and replay by operations (`/api/v1/admin/dead-letters`); consumers deduplicate, so a replay acts once | `TransactionFlowIT#deadLettersCanBeInspectedAndReplayedOnce` |
+| Everything at once | `scripts/chaos-test.sh` while 6 clients pay and refund: kills replicas of each service, pauses Kafka 20 s, stops Postgres 15 s, kills the gateway, kills all payment-service replicas | Measured: 102 failed requests retried with the same key, 0 lost, 236 payments and 115 refunds each booked exactly once, ledger balanced |
+
 ## Recovery workflows (summary)
 
 | Stuck condition | Detected by | Recovery |

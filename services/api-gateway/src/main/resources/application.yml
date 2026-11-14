@@ -337,6 +337,9 @@ hpg:
 # down or hung": refused or dropped connections and timeouts. A service's own 4xx/5xx answers pass through
 # unchanged (with its problem details). A service failing half of the last 20 calls is skipped for 10 s: callers get 503 at once instead of waiting for timeouts, and the service gets room to
 # recover. The time limit sits above the HTTP client's 10 s response timeout, so that timeout fires first.
+spring.cloud.circuitbreaker.bulkhead.resilience4j.enabled: false   # services shed load themselves (503 SERVICE_BUSY);
+                                                                    # a second limit here only turned busy into 500s
+
 resilience4j:
   circuitbreaker:
     configs:

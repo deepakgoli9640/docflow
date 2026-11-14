@@ -270,6 +270,21 @@ Four parts, in order: Kubernetes + HA, production security, business features, a
   - an OPS-wide disputes view;
   - finance email.
 
+## Phase 10 — Resilience between services ✅ done
+- **Load shedding:** every service (shared filter) answers `503 SERVICE_BUSY` + `Retry-After` within 250 ms
+  when at capacity.
+- **Database:** a Postgres `statement_timeout` on every connection; a cancelled statement is `503`.
+- **Gateway:**
+  - a circuit breaker per downstream service, counting outages only;
+  - GET retries on connection errors and 502/503;
+  - `503`/`504` with `Retry-After`;
+  - Spring's default bulkhead disabled (it turned "busy" into 500s).
+- **Dead letters:** inspection and replay for operations, with an audit trail of replays.
+- **Simulated provider:** state moved to Postgres, so it behaves like an external provider across replicas
+  and restarts. The chaos test exposed this: payments were lost when a checkout reached the other replica.
+- **`scripts/chaos-test.sh`:** kills, pauses and stops infrastructure under load, then checks the money
+  invariants.
+
 ## Testing approach used throughout
 
 | Level | Tools | Notes |

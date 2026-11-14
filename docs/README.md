@@ -104,3 +104,7 @@ designed but not built.
 | Token signing-key rotation (active + retired public keys in the JWKS), production refuses ephemeral keys | **Real** | `KeyRotationIT` |
 | Secrets from a secret manager (External Secrets), TLS at the ingress with HSTS, Postgres TLS | **Real, validated statically** | Kubernetes manifests; not run on a live cluster |
 | Service-to-service mTLS (service mesh), penetration test | **Not yet** | |
+| Load shedding in every service (fast 503 + Retry-After), Postgres statement timeout | **Real** | |
+| Gateway circuit breaker per service, GET retries on another replica, 503/504 with Retry-After | **Real** | |
+| Dead-letter inspection and replay for operations | **Real** | `/api/v1/admin/dead-letters` (OPS) |
+| Chaos test (replicas, Kafka, Postgres, gateway killed under load) | **Real** | `scripts/chaos-test.sh`: nothing lost or booked twice |
