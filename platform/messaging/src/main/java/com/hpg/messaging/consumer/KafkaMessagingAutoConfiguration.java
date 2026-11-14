@@ -117,4 +117,21 @@ public class KafkaMessagingAutoConfiguration {
         }
         return builder.build();
     }
+
+    /** Dead-letter inspection and replay; one service exposes it to operations (hpg.messaging.dead-letters.admin). */
+    @Bean
+    @ConditionalOnBean({KafkaTemplate.class, JdbcTemplate.class})
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "hpg.messaging.dead-letters.admin",
+            havingValue = "true")
+    public com.hpg.messaging.deadletter.DeadLetterService deadLetterService(
+            org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties,
+            org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails connection,
+            KafkaTemplate<String, String> template, JdbcTemplate jdbc, java.time.Clock clock) {
+        return new com.hpg.messaging.deadletter.DeadLetterService(() -> {
+            java.util.Map<String, Object> config = new java.util.HashMap<>(kafkaProperties.buildConsumerProperties(null));
+            config.put(org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                    String.join(",", connection.getBootstrapServers()));
+            return config;
+        }, template, jdbc, clock);
+    }
 }

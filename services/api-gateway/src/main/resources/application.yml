@@ -217,7 +217,7 @@ spring:
             - id: transaction-api
               uri: ${HPG_TRANSACTION_SERVICE_URI:http://localhost:8084}
               predicates:
-                - Path=/api/v1/transactions,/api/v1/transactions/**,/api/v1/reports/**,/api/v1/admin/ledger/**
+                - Path=/api/v1/transactions,/api/v1/transactions/**,/api/v1/reports/**,/api/v1/admin/ledger/**,/api/v1/admin/dead-letters,/api/v1/admin/dead-letters/**
               filters:
                 - name: RequestSize
                   args:

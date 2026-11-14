@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -245,5 +246,65 @@ class TransactionFlowIT {
                         "CHARGEBACK_REVERSAL PROVIDER_CLEARING DEBIT 800.00", "CHARGEBACK_REVERSAL MERCHANT_PAYABLE:M CREDIT 800.00");
         mvc.perform(get("/api/v1/admin/ledger/integrity").with(ops()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.healthy").value(true));
+    }
+
+    @Test
+    void deadLettersCanBeInspectedAndReplayedOnce() throws Exception {
+        // 1. A poison event (payload that cannot be read) goes to the dead-letter topic without retries.
+        UUID poisonKey = Ids.newId();
+        String poison = "{\"eventId\":\"" + Ids.newId() + "\",\"eventType\":\"PaymentCaptured\",\"eventVersion\":1,"
+                + "\"aggregateId\":\"" + poisonKey + "\",\"payload\":{\"amount\":\"not money\"}}";
+        kafka.send(Topics.PAYMENT_EVENTS, poisonKey.toString(), poison).get();
+        JsonNode listed = await().atMost(Duration.ofSeconds(60)).until(() -> json.readTree(mvc.perform(
+                        get("/api/v1/admin/dead-letters").param("sourceTopic", Topics.PAYMENT_EVENTS).with(ops()))
+                .andReturn().getResponse().getContentAsString()), l -> {
+                    for (JsonNode d : l) {
+                        if (poisonKey.toString().equals(d.path("key").asText())) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+        JsonNode dead = null;
+        for (JsonNode d : listed) {
+            if (poisonKey.toString().equals(d.path("key").asText())) {
+                dead = d;
+            }
+        }
+        assertThat(dead.get("originalTopic").asText()).isEqualTo(Topics.PAYMENT_EVENTS);
+        assertThat(dead.get("consumerGroup").asText()).isEqualTo("transaction-payments");
+        assertThat(dead.get("exception").asText()).isNotBlank();
+
+        // 2. A good event that had been dead-lettered (e.g. a bug since fixed) is replayed and processed once.
+        UUID paymentId = Ids.newId();
+        var payload = new PaymentEventPayload(paymentId, merchantId, "BILL-DLT", Money.inr("75.00"), "CAPTURED", null,
+                "AUTO", "RAZORPAY", "order_dlt", "pay_dlt", false, null, null, t0, null);
+        var envelope = new EventEnvelope<>(Ids.newId(), "PaymentCaptured", 1, t0, "payment-service", "Payment",
+                paymentId.toString(), 2, merchantId, "corr", null, payload);
+        var record = new org.apache.kafka.clients.producer.ProducerRecord<>(Topics.dlt(Topics.PAYMENT_EVENTS),
+                paymentId.toString(), json.writeValueAsString(envelope));
+        record.headers().add(org.springframework.kafka.support.KafkaHeaders.DLT_ORIGINAL_TOPIC, Topics.PAYMENT_EVENTS.getBytes());
+        record.headers().add(org.springframework.kafka.support.KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP, "transaction-payments".getBytes());
+        record.headers().add("eventId", envelope.eventId().toString().getBytes());
+        var sent = kafka.send(record).get().getRecordMetadata();
+        String replayUrl = "/api/v1/admin/dead-letters/" + sent.topic() + "/" + sent.partition() + "/" + sent.offset() + "/replay";
+
+        mvc.perform(post(replayUrl).with(ops())).andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.replayedBy").isNotEmpty());
+        await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.queryForObject(
+                "SELECT count(*) FROM transactions WHERE payment_id = ?", Integer.class, paymentId) == 1);
+
+        // Replaying again is refused (audit trail), and even when forced the event is booked only once.
+        mvc.perform(post(replayUrl).with(ops())).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("DEAD_LETTER_ALREADY_REPLAYED"));
+        mvc.perform(post(replayUrl).param("force", "true").with(ops())).andExpect(status().isAccepted());
+        Thread.sleep(2000);
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM ledger_entries e JOIN transactions t ON t.id = e.transaction_id
+                WHERE t.payment_id = ?""", Integer.class, paymentId)).isEqualTo(2);
+
+        // Hospitals cannot see or replay dead letters.
+        mvc.perform(get("/api/v1/admin/dead-letters").with(merchant(merchantId))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/admin/dead-letters/x.dlt/0/0/replay").with(ops())).andExpect(status().isNotFound());
     }
 }
