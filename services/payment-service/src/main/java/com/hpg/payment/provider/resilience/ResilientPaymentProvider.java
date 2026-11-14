@@ -7,6 +7,7 @@ import com.hpg.payment.provider.CreateOrderCommand;
 import com.hpg.payment.provider.PaymentProvider;
 import com.hpg.payment.provider.ProviderException;
 import com.hpg.payment.provider.ProviderOrder;
+import com.hpg.payment.provider.ProviderDispute;
 import com.hpg.payment.provider.ProviderPayment;
 import com.hpg.payment.provider.ProviderRejectedException;
 import com.hpg.payment.provider.ProviderTimeoutException;
@@ -84,6 +85,16 @@ public class ResilientPaymentProvider implements PaymentProvider {
     @Override
     public ProviderPayment capture(String providerPaymentId, Money amount) {
         return execute("capture", safeRetry, () -> delegate.capture(providerPaymentId, amount));
+    }
+
+    @Override
+    public ProviderDispute acceptDispute(String providerDisputeId) {
+        return execute("acceptDispute", safeRetry, () -> delegate.acceptDispute(providerDisputeId));
+    }
+
+    @Override
+    public ProviderDispute contestDispute(String providerDisputeId, Money amount, String summary) {
+        return execute("contestDispute", safeRetry, () -> delegate.contestDispute(providerDisputeId, amount, summary));
     }
 
     @Override

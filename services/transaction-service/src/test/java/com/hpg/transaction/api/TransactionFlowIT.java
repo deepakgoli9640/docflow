@@ -186,4 +186,64 @@ class TransactionFlowIT {
                 .isEqualTo("CAPTURED");
     }
 
+    @Test
+    void settlementConfirmedByReconciliationIsBookedOnce() throws Exception {
+        UUID paymentId = Ids.newId();
+        var payload = new PaymentEventPayload(paymentId, merchantId, "BILL-SETTLE", Money.inr("1000.00"), "CAPTURED",
+                null, "AUTO", "RAZORPAY", "order_s", "pay_settle", false, null, null, t0, null);
+        send(Topics.PAYMENT_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), "PaymentCaptured", 1, t0,
+                "payment-service", "Payment", paymentId.toString(), 2, merchantId, "corr", null, payload));
+        String ref = await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.query(
+                "SELECT transaction_ref FROM transactions WHERE payment_id = ?", (rs, i) -> rs.getString(1), paymentId)
+                .stream().findFirst().orElse(null), java.util.Objects::nonNull);
+
+        // Reconciliation matched it twice (two reports listing the same payment): booked once.
+        for (int i = 0; i < 2; i++) {
+            var settled = new com.hpg.events.reconciliation.SettlementConfirmedPayload(Ids.newId(), merchantId, ref,
+                    "pay_settle", Money.inr("1000.00"), Money.inr("20.00"), Money.inr("3.60"), "setl_1", t0);
+            send(Topics.RECONCILIATION_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), "SettlementConfirmed", 1, t0,
+                    "reconciliation-service", "Settlement", ref, 1, merchantId, "corr", null, settled));
+        }
+        await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.queryForObject(
+                "SELECT count(*) FROM processed_events WHERE consumer_group = 'transaction-settlements'", Integer.class) >= 2);
+        var entries = jdbc.queryForList("""
+                SELECT e.account_code, e.direction, e.amount FROM ledger_entries e JOIN transactions t ON t.id = e.transaction_id
+                WHERE t.payment_id = ? AND e.posting_type = 'SETTLEMENT' ORDER BY e.id""", paymentId);
+        assertThat(entries).extracting(m -> m.get("account_code") + " " + m.get("direction") + " " + m.get("amount"))
+                .containsExactly("SETTLEMENT_BANK DEBIT 976.40", "PROVIDER_FEES DEBIT 23.60", "PROVIDER_CLEARING CREDIT 1000.00");
+        mvc.perform(get("/api/v1/admin/ledger/integrity").with(ops()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.healthy").value(true));
+    }
+
+    @Test
+    void chargebackAndItsReversalAreBookedAgainstThePayment() throws Exception {
+        UUID paymentId = Ids.newId();
+        var captured = new PaymentEventPayload(paymentId, merchantId, "BILL-CB", Money.inr("800.00"), "CAPTURED",
+                null, "AUTO", "RAZORPAY", "order_cb", "pay_cb", false, null, null, t0, null);
+        send(Topics.PAYMENT_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), "PaymentCaptured", 1, t0,
+                "payment-service", "Payment", paymentId.toString(), 2, merchantId, "corr", null, captured));
+        UUID disputeId = Ids.newId();
+        for (String[] step : new String[][] {{"DisputeOpened", "OPEN", null}, {"DisputeFundsDeducted", "OPEN", "800.00"},
+                {"DisputeFundsReinstated", "WON", "800.00"}, {"DisputeResolved", "WON", null}}) {
+            var d = new com.hpg.events.dispute.DisputeEventPayload(disputeId, paymentId, merchantId, "RAZORPAY", "disp_cb",
+                    "pay_cb", Money.inr("800.00"), step[2] == null ? null : Money.inr(step[2]), step[1], "fraud",
+                    "chargeback", null, t0);
+            send(Topics.DISPUTE_EVENTS, paymentId, new EventEnvelope<>(Ids.newId(), step[0], 1, t0, "payment-service",
+                    "Dispute", disputeId.toString(), 1, merchantId, "corr", null, d));
+        }
+        await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.queryForObject("""
+                SELECT count(*) FROM transaction_events e JOIN transactions t ON t.id = e.transaction_id
+                WHERE t.payment_id = ? AND e.event_type LIKE 'Dispute%'""", Integer.class, paymentId) == 4);
+        var postings = jdbc.queryForList("""
+                SELECT e.posting_type, e.account_code, e.direction, e.amount FROM ledger_entries e
+                JOIN transactions t ON t.id = e.transaction_id WHERE t.payment_id = ? ORDER BY e.id""", paymentId);
+        assertThat(postings).extracting(m -> m.get("posting_type") + " " + m.get("account_code").toString().replace(merchantId.toString(), "M")
+                        + " " + m.get("direction") + " " + m.get("amount"))
+                .containsExactly("CAPTURE PROVIDER_CLEARING DEBIT 800.00", "CAPTURE MERCHANT_PAYABLE:M CREDIT 800.00",
+                        "CHARGEBACK MERCHANT_PAYABLE:M DEBIT 800.00", "CHARGEBACK PROVIDER_CLEARING CREDIT 800.00",
+                        "CHARGEBACK_REVERSAL PROVIDER_CLEARING DEBIT 800.00", "CHARGEBACK_REVERSAL MERCHANT_PAYABLE:M CREDIT 800.00");
+        mvc.perform(get("/api/v1/admin/ledger/integrity").with(ops()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.healthy").value(true));
+    }
 }

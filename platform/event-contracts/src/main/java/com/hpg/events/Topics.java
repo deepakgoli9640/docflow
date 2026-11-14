@@ -9,6 +9,7 @@ public final class Topics {
     public static final String MERCHANT_SNAPSHOTS = "merchant.snapshots.v1";
     public static final String RECONCILIATION_EVENTS = "reconciliation.events.v1";
     public static final String NOTIFICATION_EVENTS = "notification.events.v1";
+    public static final String DISPUTE_EVENTS = "dispute.events.v1";
 
     /** Suffix of the dead-letter topic for a source topic (records that could not be processed). */
     public static final String DLT_SUFFIX = ".dlt";

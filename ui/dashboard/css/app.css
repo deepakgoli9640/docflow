@@ -259,3 +259,9 @@ label.inline { display: inline-flex; gap: .4rem; align-items: center; }
 .stats-compact { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .6rem; }
 .stats-compact .stat { padding: .7rem .8rem; box-shadow: none; }
 .stats-compact .stat-value { font-size: 1.2rem; }
+
+/* Sign-in: single sign-on above the API-credential form */
+.sso { display: grid; gap: 12px; margin-bottom: 4px; }
+.sso:empty { display: none; }
+.sso .divider { text-align: center; margin: 4px 0 0; }
+.text-bad { color: var(--bad); font-weight: 600; }

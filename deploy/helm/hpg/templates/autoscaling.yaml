@@ -1,0 +1,45 @@
+{{- $root := . -}}
+{{- range $name, $raw := .Values.services }}
+{{- $svc := include "hpg.settings" (dict "root" $root "svc" $raw) | fromYaml }}
+{{- $ctx := dict "root" $root "name" $name }}
+{{- if $svc.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "hpg.component" $ctx }}
+  labels:
+    {{- include "hpg.labels" $ctx | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "hpg.component" $ctx }}
+  minReplicas: {{ $svc.autoscaling.minReplicas }}
+  maxReplicas: {{ $svc.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $svc.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # no flapping after a burst
+{{- end }}
+{{- if $svc.podDisruptionBudget }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hpg.component" $ctx }}
+  labels:
+    {{- include "hpg.labels" $ctx | nindent 4 }}
+spec:
+  minAvailable: {{ $svc.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "hpg.selectorLabels" $ctx | nindent 6 }}
+{{- end }}
+{{- end }}

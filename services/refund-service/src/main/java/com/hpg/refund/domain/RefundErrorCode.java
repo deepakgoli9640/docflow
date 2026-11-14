@@ -6,6 +6,7 @@ public enum RefundErrorCode implements ErrorCode {
 
     REFUND_NOT_FOUND(404, "Refund not found"),
     PAYMENT_NOT_YET_REFUNDABLE(409, "Payment is not (yet) refundable"),
+    PAYMENT_DISPUTED(409, "The payment is under an open dispute"),
     REQUEST_IN_PROGRESS(409, "A request with this Idempotency-Key is still being processed"),
     MERCHANT_SUSPENDED(403, "Merchant is not active"),
     PROVIDER_MISMATCH(409, "The payment was made with a provider this deployment cannot refund"),

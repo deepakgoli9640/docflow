@@ -1,0 +1,28 @@
+# `helm test <release>`: the gateway answers through its Service and reports ready.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "hpg.fullname" . }}-test-gateway
+  labels:
+    app.kubernetes.io/part-of: hpg-test
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: probe
+      image: curlimages/curl:8.10.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+        readOnlyRootFilesystem: true
+      command: ["sh", "-c"]
+      args:
+        - >-
+          curl -fsS http://{{ include "hpg.component" (dict "root" . "name" "api-gateway") }}:9080/actuator/health/readiness &&
+          curl -fsS -o /dev/null -w '%{http_code}' http://{{ include "hpg.component" (dict "root" . "name" "api-gateway") }}:8080/api/v1/payments | grep -q 401

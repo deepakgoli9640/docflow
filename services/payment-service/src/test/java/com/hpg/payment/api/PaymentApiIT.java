@@ -725,4 +725,131 @@ class PaymentApiIT {
                     .hasMessageContaining("append-only");
         }
     }
+
+    // ---------------------------------------------------------------- disputes
+
+    @Nested
+    class Disputes {
+
+        List<String> disputeEvents(String paymentId) {
+            return jdbc.queryForList("""
+                    SELECT event_type FROM outbox_events WHERE topic = 'dispute.events.v1' AND message_key = ? ORDER BY id""",
+                    String.class, paymentId);
+        }
+
+        String moneyMoved(String paymentId, String eventType) {
+            return jdbc.queryForObject("""
+                    SELECT payload->'payload'->'moneyMoved'->>'amount' FROM outbox_events
+                    WHERE topic = 'dispute.events.v1' AND message_key = ? AND event_type = ?""", String.class, paymentId, eventType);
+        }
+
+        String capturedPayment(String providerPaymentId) throws Exception {
+            String id = createOk(reference()).get("id").asText();
+            webhook(RazorpayStub.webhook("payment.captured",
+                    RazorpayStub.payment(providerPaymentId, orderId, "captured", 2_000_000), now()))
+                    .andExpect(jsonPath("$.outcome").value("APPLIED"));
+            return id;
+        }
+
+        JsonNode onlyDispute() throws Exception {
+            JsonNode list = json.readTree(mvc.perform(get("/api/v1/disputes").with(merchant(merchantId)))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            assertThat(list).hasSize(1);
+            return list.get(0);
+        }
+
+        /** Chargeback with the money deducted at once; the hospital contests and wins it back. */
+        @Test
+        void contestedDisputeThatIsWonGivesTheMoneyBack() throws Exception {
+            String pay = pid("pay_dsp");
+            String disp = pid("disp");
+            String paymentId = capturedPayment(pay);
+            String payment = RazorpayStub.payment(pay, orderId, "captured", 2_000_000);
+            long respondBy = now() + 7 * 86_400;
+
+            webhook(RazorpayStub.disputeWebhook("payment.dispute.created", payment,
+                    RazorpayStub.dispute(disp, pay, 2_000_000, 2_000_000, "open", respondBy), now()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("APPLIED"));
+            JsonNode d = onlyDispute();
+            assertThat(d.get("status").asText()).isEqualTo("OPEN");
+            assertThat(d.at("/amountDeducted/amount").asText()).isEqualTo("20000.00");
+            assertThat(d.get("reasonCode").asText()).isEqualTo("chargeback_product_not_received");
+            assertThat(disputeEvents(paymentId)).containsExactly("DisputeOpened", "DisputeFundsDeducted");
+            assertThat(moneyMoved(paymentId, "DisputeFundsDeducted")).isEqualTo("20000.00");
+
+            // The same notification again (new event id): nothing new happens.
+            webhook(RazorpayStub.disputeWebhook("payment.dispute.created", payment,
+                    RazorpayStub.dispute(disp, pay, 2_000_000, 2_000_000, "open", respondBy), now()))
+                    .andExpect(jsonPath("$.outcome").value("NO_CHANGE"));
+
+            String id = d.get("id").asText();
+            RAZORPAY.stubFor(com.github.tomakehurst.wiremock.client.WireMock.patch(
+                            com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/v1/disputes/" + disp + "/contest"))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath("$.summary"))
+                    .willReturn(com.github.tomakehurst.wiremock.client.WireMock.okJson(
+                            RazorpayStub.dispute(disp, pay, 2_000_000, 2_000_000, "under_review", respondBy))));
+            mvc.perform(post("/api/v1/disputes/{id}/contest", id).with(merchant(merchantId))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"summary\":\"Consultation on 12 Nov, signed consent and invoice INV-77 attached\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("UNDER_REVIEW"))
+                    .andExpect(jsonPath("$.merchantResponse").value("CONTESTED"));
+            mvc.perform(post("/api/v1/disputes/{id}/accept", id).with(merchant(merchantId)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.errorCode").value("DISPUTE_NOT_OPEN"));
+
+            webhook(RazorpayStub.disputeWebhook("payment.dispute.won", payment,
+                    RazorpayStub.dispute(disp, pay, 2_000_000, 0, "won", respondBy), now()))
+                    .andExpect(jsonPath("$.outcome").value("APPLIED"));
+            // A late "under review" never reopens a decided dispute.
+            webhook(RazorpayStub.disputeWebhook("payment.dispute.under_review", payment,
+                    RazorpayStub.dispute(disp, pay, 2_000_000, 2_000_000, "under_review", respondBy), now()))
+                    .andExpect(jsonPath("$.outcome").value("NO_CHANGE"));
+
+            JsonNode won = onlyDispute();
+            assertThat(won.get("status").asText()).isEqualTo("WON");
+            assertThat(won.at("/amountDeducted/amount").asText()).isEqualTo("0.00");
+            assertThat(won.get("resolvedAt").isNull()).isFalse();
+            assertThat(disputeEvents(paymentId)).containsExactly("DisputeOpened", "DisputeFundsDeducted",
+                    "DisputeFundsReinstated", "DisputeResolved");
+            assertThat(moneyMoved(paymentId, "DisputeFundsReinstated")).isEqualTo("20000.00");
+            assertThat(statusOf(paymentId)).isEqualTo("CAPTURED");          // the payment itself is untouched
+
+            // Another hospital cannot see it.
+            mvc.perform(get("/api/v1/disputes/{id}", id).with(merchant(UUID.randomUUID())))
+                    .andExpect(status().isNotFound()).andExpect(jsonPath("$.errorCode").value("DISPUTE_NOT_FOUND"));
+        }
+
+        /** Nothing deducted yet; the hospital accepts; losing books the full chargeback. */
+        @Test
+        void acceptedDisputeIsLostAndChargedBack() throws Exception {
+            String pay = pid("pay_acc");
+            String disp = pid("disp");
+            String paymentId = capturedPayment(pay);
+            long respondBy = now() + 5 * 86_400;
+            webhook(RazorpayStub.disputeWebhook("payment.dispute.created", RazorpayStub.payment(pay, orderId, "captured", 2_000_000),
+                    RazorpayStub.dispute(disp, pay, 500_000, 0, "open", respondBy), now()))
+                    .andExpect(jsonPath("$.outcome").value("APPLIED"));
+            assertThat(disputeEvents(paymentId)).containsExactly("DisputeOpened");
+
+            RAZORPAY.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post(
+                            com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/v1/disputes/" + disp + "/accept"))
+                    .willReturn(com.github.tomakehurst.wiremock.client.WireMock.okJson(
+                            RazorpayStub.dispute(disp, pay, 500_000, 0, "lost", respondBy))));
+            mvc.perform(post("/api/v1/disputes/{id}/accept", onlyDispute().get("id").asText()).with(merchant(merchantId)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("LOST"))
+                    .andExpect(jsonPath("$.merchantResponse").value("ACCEPTED"))
+                    .andExpect(jsonPath("$.amountDeducted.amount").value("5000.00"));
+            assertThat(disputeEvents(paymentId)).containsExactly("DisputeOpened", "DisputeFundsDeducted", "DisputeResolved");
+            assertThat(moneyMoved(paymentId, "DisputeFundsDeducted")).isEqualTo("5000.00");
+        }
+
+        @Test
+        void disputeForAnUnknownPaymentIsAcknowledged() throws Exception {
+            webhook(RazorpayStub.disputeWebhook("payment.dispute.created", RazorpayStub.payment("pay_nope", "order_x", "captured", 100),
+                    RazorpayStub.dispute(pid("disp"), "pay_nope", 100, 0, "open", now() + 86_400), now()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("UNKNOWN_ORDER"));
+        }
+    }
 }

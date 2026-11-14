@@ -157,8 +157,13 @@ class NotificationFlowIT {
         wiremock.stubFor(WireMock.post(urlEqualTo("/hooks/" + merchantId)).willReturn(aResponse().withStatus(204)));
         UUID paymentId = paymentEvent("PaymentCaptured", "CAPTURED", "asha@example.com");
 
-        List<Notification> created = awaitNotifications(paymentId, 2);
-        assertThat(created).extracting(Notification::getChannel).containsExactlyInAnyOrder(Channel.WEBHOOK, Channel.EMAIL);
+        List<Notification> created = awaitNotifications(paymentId, 3);
+        assertThat(created).extracting(Notification::getChannel)
+                .containsExactlyInAnyOrder(Channel.WEBHOOK, Channel.EMAIL, Channel.SMS);
+        assertThat(created).filteredOn(n -> n.getChannel() == Channel.SMS).singleElement().satisfies(n -> {
+            assertThat(n.getBody()).startsWith("Payment of INR 2000.00 received for bill ").hasSizeLessThan(160);
+            assertThat(n.getBody()).doesNotContain("Asha");
+        });
         dispatchUntilQuiet();
 
         List<LoggedRequest> requests = wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId)));
@@ -181,10 +186,13 @@ class NotificationFlowIT {
         // The patient's address is encrypted at rest.
         assertThat(jdbc.queryForList("SELECT recipient_enc FROM notifications WHERE payment_id = ? AND channel = 'EMAIL'",
                 String.class, paymentId).getFirst()).doesNotContain("asha");
+        // ...and so is the phone number; the local SMS provider only logs a masked number.
+        assertThat(jdbc.queryForList("SELECT recipient_enc FROM notifications WHERE payment_id = ? AND channel = 'SMS'",
+                String.class, paymentId).getFirst()).doesNotContain("9800000000");
 
         mvc.perform(get("/api/v1/notifications").param("paymentId", paymentId.toString()).with(merchant()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content.length()").value(3))
                 .andExpect(jsonPath("$.content[?(@.channel == 'EMAIL')].recipient").value(org.hamcrest.Matchers.hasItem(
                         org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("asha@")))));
     }
@@ -269,5 +277,28 @@ class NotificationFlowIT {
         assertThat(n.getPublicEventType()).isEqualTo("refund.completed");
         LoggedRequest hook = wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId))).getFirst();
         assertThat(json.readTree(hook.getBodyAsString()).at("/data/refundedTotal/amount").asText()).isEqualTo("500.00");
+    }
+
+    @Test
+    void openedDisputeIsSentToTheHospitalWithItsDeadline() throws Exception {
+        wiremock.stubFor(WireMock.post(urlEqualTo("/hooks/" + merchantId)).willReturn(aResponse().withStatus(200)));
+        UUID paymentId = Ids.newId();
+        UUID disputeId = Ids.newId();
+        Instant respondBy = Instant.parse("2026-12-01T00:00:00Z");
+        var payload = new com.hpg.events.dispute.DisputeEventPayload(disputeId, paymentId, merchantId, "RAZORPAY",
+                "disp_9", "pay_9", Money.inr("1200.00"), null, "OPEN", "chargeback_unauthorised", "chargeback", respondBy,
+                Instant.now());
+        kafka.send(Topics.DISPUTE_EVENTS, paymentId.toString(), json.writeValueAsString(new EventEnvelope<>(Ids.newId(),
+                "DisputeOpened", 1, Instant.now(), "payment-service", "Dispute", disputeId.toString(), 0, merchantId,
+                "corr", null, payload))).get();
+
+        Notification n = awaitNotifications(paymentId, 1).getFirst();
+        dispatchUntilQuiet();
+        assertThat(n.getPublicEventType()).isEqualTo("dispute.opened");
+        LoggedRequest hook = wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId))).getFirst();
+        JsonNode body = json.readTree(hook.getBodyAsString());
+        assertThat(body.get("type").asText()).isEqualTo("dispute.opened");
+        assertThat(body.at("/data/respondBy").asText()).isEqualTo("2026-12-01T00:00:00Z");
+        assertThat(body.at("/data/amount/amount").asText()).isEqualTo("1200.00");
     }
 }

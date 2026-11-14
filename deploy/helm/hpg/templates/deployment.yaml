@@ -1,0 +1,190 @@
+{{- $root := . -}}
+{{- range $name, $raw := .Values.services }}
+{{- $svc := include "hpg.settings" (dict "root" $root "svc" $raw) | fromYaml }}
+{{- $ctx := dict "root" $root "name" $name }}
+{{- $java := ne $name "dashboard" }}
+{{- $mgmtPort := default $svc.port $svc.managementPort }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hpg.component" $ctx }}
+  labels:
+    {{- include "hpg.labels" $ctx | nindent 4 }}
+spec:
+  {{- if not $svc.autoscaling.enabled }}
+  replicas: {{ $svc.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0        # never below the current capacity during a rollout
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "hpg.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hpg.labels" $ctx | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $root.Template.BasePath "/configmap.yaml") $root | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "hpg.fullname" $root }}
+      automountServiceAccountToken: false
+      {{- with $root.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds }}
+      # Spread replicas over zones and nodes, so one failure never takes all of them.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "hpg.selectorLabels" $ctx | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "hpg.selectorLabels" $ctx | nindent 14 }}
+      securityContext:
+        {{- if $java }}
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001         # lets the non-root user read the mounted signing key
+        {{- end }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $name }}
+          image: {{ printf "%s/hpg-%s:%s" $root.Values.image.registry (default $name $svc.image) $root.Values.image.tag | quote }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+            {{- if ne (int $mgmtPort) (int $svc.port) }}
+            - name: management
+              containerPort: {{ $mgmtPort }}
+            {{- end }}
+          {{- if $java }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "hpg.fullname" $root }}-common
+          env:
+            - name: SERVER_PORT
+              value: {{ $svc.port | quote }}
+            {{- range $key := $svc.secrets }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secrets.existingSecret }}
+                  key: {{ $key }}
+                  optional: true   # e.g. no Razorpay keys with the simulated provider; the service fails fast if it needs one
+            {{- end }}
+            {{- if $svc.db }}
+            - name: {{ $svc.db }}_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secrets.existingSecret }}
+                  key: {{ $svc.db }}_DB_PASSWORD
+            {{- end }}
+            {{- if eq $name "merchant-service" }}
+            - name: HPG_JWT_PRIVATE_KEY_LOCATION
+              value: file:/etc/hpg/jwt/private.pem
+            - name: HPG_JWT_PUBLIC_KEY_LOCATION
+              value: file:/etc/hpg/jwt/public.pem
+            {{- end }}
+          {{- else }}
+          env:
+            - name: GATEWAY_URL
+              value: {{ printf "http://%s:%v" (include "hpg.component" (dict "root" $root "name" "api-gateway")) (index $root.Values.services "api-gateway").port | quote }}
+            # Single sign-on: the dashboard proxies /auth/ to the identity provider (same origin, strict CSP).
+            - name: OIDC_AUTHORITY
+              value: {{ ternary "/auth/realms/hpg" "" $root.Values.oidc.enabled | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ $root.Values.oidc.dashboardClientId | quote }}
+            - name: OIDC_UPSTREAM
+              value: {{ $root.Values.oidc.dashboardUpstream | quote }}
+            - name: NGINX_RESOLVER
+              value: kube-dns.kube-system.svc.cluster.local
+          {{- end }}
+          {{- if $java }}
+          # Boot's probe groups: liveness = the JVM is not stuck; readiness = ready for traffic (false while
+          # starting and during graceful shutdown). The startup probe gives slow starts up to 3 minutes.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: {{ $mgmtPort }} }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: {{ $mgmtPort }} }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: {{ $mgmtPort }} }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            # Let endpoints and the ingress stop routing here before Spring starts its graceful shutdown.
+            preStop:
+              exec:
+                command: ["sleep", "10"]
+          {{- else }}
+          readinessProbe:
+            httpGet: { path: /, port: {{ $svc.port }} }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: {{ $svc.port }} }
+            periodSeconds: 10
+          {{- end }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              {{- if not $java }}
+              add: ["CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE"]   # nginx master drops to its worker user
+              {{- end }}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if eq $name "merchant-service" }}
+            - name: jwt
+              mountPath: /etc/hpg/jwt
+              readOnly: true
+            {{- end }}
+            {{- if not $java }}
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if eq $name "merchant-service" }}
+        - name: jwt
+          secret:
+            secretName: {{ $root.Values.secrets.jwtSecret }}
+            defaultMode: 0440
+        {{- end }}
+        {{- if not $java }}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-conf
+          emptyDir: {}
+        {{- end }}
+{{- end }}

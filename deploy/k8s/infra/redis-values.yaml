@@ -1,0 +1,15 @@
+# Redis for the gateway (rate limits, suspended-merchant deny-list) with the Bitnami chart:
+#   helm install hpg-redis oci://registry-1.docker.io/bitnamicharts/redis -f deploy/k8s/infra/redis-values.yaml
+# One primary + two replicas. Both uses fail open (D50): if Redis is unavailable the gateway keeps serving,
+# and payment/refund creation is still refused for suspended merchants by the services' own replicas.
+# Service name used by the HPG chart: hpg-redis-master.
+architecture: replication
+auth:
+  enabled: true
+  existingSecret: hpg-redis
+  existingSecretPasswordKey: password
+replica:
+  replicaCount: 2
+master:
+  persistence:
+    enabled: false        # rate-limit counters and a 20-minute deny-list: nothing to keep across restarts

@@ -37,6 +37,7 @@ public class NotificationDispatcher {
     private final NotificationRepository notifications;
     private final WebhookSender webhooks;
     private final EmailSender emails;
+    private final com.hpg.notification.delivery.SmsSender sms;
     private final OutboxWriter outbox;
     private final Backoff backoff;
     private final NotificationProperties.Dispatch config;
@@ -46,7 +47,9 @@ public class NotificationDispatcher {
 
     public NotificationDispatcher(NotificationStore store, NotificationRepository notifications, WebhookSender webhooks,
             EmailSender emails, OutboxWriter outbox, Backoff backoff, NotificationProperties properties,
-            PlatformTransactionManager txManager, MeterRegistry meters, Clock clock) {
+            PlatformTransactionManager txManager, MeterRegistry meters, Clock clock,
+            com.hpg.notification.delivery.SmsSender sms) {
+        this.sms = sms;
         this.store = store;
         this.notifications = notifications;
         this.webhooks = webhooks;
@@ -77,7 +80,11 @@ public class NotificationDispatcher {
     private void deliver(UUID id) {
         Notification n = notifications.findById(id).orElseThrow();
         long started = System.nanoTime();
-        DeliveryResult result = n.getChannel() == Channel.WEBHOOK ? webhooks.send(n) : emails.send(n);
+        DeliveryResult result = switch (n.getChannel()) {
+            case WEBHOOK -> webhooks.send(n);
+            case EMAIL -> emails.send(n);
+            case SMS -> sms.send(n);
+        };
         long durationMs = (System.nanoTime() - started) / 1_000_000;
         tx.executeWithoutResult(s -> record(id, result, durationMs));
     }

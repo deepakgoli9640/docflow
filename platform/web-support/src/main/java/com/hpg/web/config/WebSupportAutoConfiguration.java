@@ -27,6 +27,7 @@ import java.util.List;
  */
 @AutoConfiguration(before = WebMvcAutoConfiguration.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@org.springframework.boot.context.properties.EnableConfigurationProperties(com.hpg.web.security.ExternalIssuerProperties.class)
 public class WebSupportAutoConfiguration {
 
     @Bean

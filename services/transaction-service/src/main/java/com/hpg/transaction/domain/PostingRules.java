@@ -12,7 +12,7 @@ import java.util.UUID;
  */
 public final class PostingRules {
 
-    public enum PostingType { CAPTURE, REFUND, REVERSAL }
+    public enum PostingType { CAPTURE, REFUND, REVERSAL, SETTLEMENT, CHARGEBACK, CHARGEBACK_REVERSAL }
 
     private PostingRules() {
     }
@@ -29,6 +29,42 @@ public final class PostingRules {
         return List.of(
                 LedgerEntry.debit(LedgerAccounts.merchantPayable(merchantId), amount),
                 LedgerEntry.credit(LedgerAccounts.PROVIDER_CLEARING, amount));
+    }
+
+    /**
+     * The provider paid a captured payment out to our bank: the net reaches the bank, fee and tax are an
+     * expense, and the provider no longer holds the gross.
+     */
+    public static List<LedgerEntry> settlement(Money gross, Money fee, Money tax) {
+        Money fees = fee.plus(tax);
+        Money net = gross.minus(fees);
+        if (!net.isPositive()) {
+            throw new IllegalArgumentException("Settlement fees " + fees + " are not below the gross " + gross);
+        }
+        List<LedgerEntry> entries = new java.util.ArrayList<>();
+        entries.add(LedgerEntry.debit(LedgerAccounts.SETTLEMENT_BANK, net));
+        if (fees.isPositive()) {
+            entries.add(LedgerEntry.debit(LedgerAccounts.PROVIDER_FEES, fees));
+        }
+        entries.add(LedgerEntry.credit(LedgerAccounts.PROVIDER_CLEARING, gross));
+        return List.copyOf(entries);
+    }
+
+    /**
+     * Chargeback: the card network took the money back from the provider's balance (clearing down), and the
+     * hospital bears it (we owe it less). The same accounts as a refund, with its own posting type.
+     */
+    public static List<LedgerEntry> chargeback(UUID merchantId, Money amount) {
+        return List.of(
+                LedgerEntry.debit(LedgerAccounts.merchantPayable(merchantId), amount),
+                LedgerEntry.credit(LedgerAccounts.PROVIDER_CLEARING, amount));
+    }
+
+    /** Dispute won after the money was deducted: the provider returns it, and we owe the hospital again. */
+    public static List<LedgerEntry> chargebackReversal(UUID merchantId, Money amount) {
+        return List.of(
+                LedgerEntry.debit(LedgerAccounts.PROVIDER_CLEARING, amount),
+                LedgerEntry.credit(LedgerAccounts.merchantPayable(merchantId), amount));
     }
 
     public static void requireBalanced(List<LedgerEntry> entries) {

@@ -1,0 +1,37 @@
+# A small demo on a single-node cluster (kind, k3d, minikube, Docker Desktop): one replica each, simulated
+# provider, no TLS, no network policies, local infrastructure from deploy/k8s/demo-infra.yaml.
+#   helm install hpg deploy/helm/hpg -f deploy/helm/hpg/values-demo.yaml
+image:
+  tag: latest
+paymentProvider: simulated
+checkoutBaseUrl: http://api.hpg.localtest.me/checkout
+postgres:
+  host: hpg-postgres
+  sslMode: disable
+kafka:
+  bootstrapServers: hpg-kafka:9092
+  topicPartitions: 3
+  topicReplicas: 1
+  minInsyncReplicas: 0
+redis:
+  host: hpg-redis
+smtp:
+  host: hpg-mailpit
+  port: 1025
+ingress:
+  annotations: {}
+  tls: false
+  apiHost: api.hpg.localtest.me          # *.localtest.me resolves to 127.0.0.1
+  dashboardHost: app.hpg.localtest.me
+networkPolicy:
+  enabled: false
+oidc:
+  enabled: false
+defaults:
+  replicas: 1
+  autoscaling:
+    enabled: false
+  podDisruptionBudget: null
+services:
+  dashboard:
+    replicas: 1

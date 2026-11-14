@@ -49,4 +49,17 @@ public interface PaymentProvider {
 
     /** What the hosted checkout page needs to open the provider's checkout for this order. */
     CheckoutConfig checkoutConfig(CheckoutRequest request);
+
+    /**
+     * The hospital accepts a dispute: the provider settles it in the patient's favour (status LOST).
+     * Not idempotent at every provider; callers check the dispute's status first.
+     */
+    default ProviderDispute acceptDispute(String providerDisputeId) {
+        throw new ProviderRejectedException("acceptDispute", "NOT_SUPPORTED", name() + " does not support disputes");
+    }
+
+    /** The hospital contests a dispute with a written summary of its evidence (status UNDER_REVIEW). */
+    default ProviderDispute contestDispute(String providerDisputeId, Money amount, String summary) {
+        throw new ProviderRejectedException("contestDispute", "NOT_SUPPORTED", name() + " does not support disputes");
+    }
 }

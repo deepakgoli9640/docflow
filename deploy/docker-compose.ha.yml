@@ -1,0 +1,26 @@
+# Two replicas of every service, to test what Kubernetes will do: one outbox relay per database (advisory
+# lock), one scheduled job runner (ShedLock), Kafka consumer groups sharing partitions, tokens signed by
+# one merchant-service replica accepted by the other (shared signing key).
+#   ./scripts/ha-check.sh        (generates the key, starts the stack with this file, runs the smoke tests)
+# Replicas cannot publish the same host port, so the per-service debugging ports are removed here.
+x-replicated: &replicated
+  ports: !reset []
+  deploy:
+    replicas: 2
+
+services:
+  merchant-service:
+    <<: *replicated
+    environment:
+      HPG_JWT_PRIVATE_KEY_LOCATION: file:/etc/hpg/jwt/private.pem
+      HPG_JWT_PUBLIC_KEY_LOCATION: file:/etc/hpg/jwt/public.pem
+    volumes:
+      - ${HPG_HA_JWT_DIR:?run scripts/ha-check.sh}:/etc/hpg/jwt:ro
+  payment-service: *replicated
+  refund-service: *replicated
+  transaction-service: *replicated
+  notification-service: *replicated
+  reconciliation-service: *replicated
+  api-gateway:
+    deploy:
+      replicas: 1     # the single published entry point (8080); Kubernetes puts a Service in front of several

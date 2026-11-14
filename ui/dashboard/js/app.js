@@ -1,5 +1,6 @@
 // Shell: sign-in screen, navigation for the two audiences, hash router.
 import { auth } from './api.js';
+import { oidcAvailable } from './oidc.js';
 import { h, clear, errorBox, button } from './ui.js';
 import * as hospital from './views/hospital.js';
 import * as admin from './views/admin.js';
@@ -12,6 +13,7 @@ const NAV = {
     ['overview', 'Overview', hospital.overview],
     ['payments', 'Payments', hospital.payments],
     ['refunds', 'Refunds', hospital.refunds],
+    ['disputes', 'Disputes', hospital.disputes],
     ['transactions', 'Transactions', hospital.transactions],
     ['notifications', 'Notifications', hospital.notifications],
     ['settings', 'Settings', hospital.settings],
@@ -59,6 +61,7 @@ function renderSignIn() {
   const notice = sessionStorage.getItem('hpg.signout');
   sessionStorage.removeItem('hpg.signout');
   const errors = h('div', { 'aria-live': 'polite' });
+  const sso = h('div', { class: 'sso' });
   const idInput = h('input', { id: 'client-id', name: 'clientId', required: true, autocomplete: 'username', spellcheck: 'false' });
   const secretInput = h('input', { id: 'client-secret', name: 'clientSecret', type: 'password', required: true, autocomplete: 'current-password' });
   const idLabel = h('label', { for: 'client-id' }, 'API key ID');
@@ -103,11 +106,21 @@ function renderSignIn() {
         h('div', {}, h('p', { class: 'brand-name' }, 'HPG Dashboard'), h('p', { class: 'brand-sub' }, 'Healthcare Payment Gateway'))),
       h('h1', {}, 'Sign in'),
       notice && h('div', { class: 'alert' }, notice),
+      sso,
       form,
       h('p', { class: 'muted small' }, 'Your secret is sent only to the gateway token endpoint and kept in memory, never stored.'))));
+  oidcAvailable().then((ok) => {
+    if (!ok) return;
+    clear(sso,
+      button('Sign in with your organisation account', () => auth.signInWithSso().catch((e) => clear(errors, errorBox(e))),
+        { variant: 'primary' }),
+      h('p', { class: 'divider muted small' }, 'or with API credentials'));
+  });
   idInput.value ? secretInput.focus() : idInput.focus();
 }
 
 auth.onChange(() => render());
 window.addEventListener('hashchange', () => render());
-render();
+auth.completeSso()
+  .catch((e) => sessionStorage.setItem('hpg.signout', e.message || 'Sign-in failed.'))
+  .finally(() => render());

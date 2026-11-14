@@ -8,15 +8,18 @@ import com.hpg.payment.provider.CheckoutRequest;
 import com.hpg.payment.provider.CreateOrderCommand;
 import com.hpg.payment.provider.HmacSignatures;
 import com.hpg.payment.provider.PaymentProvider;
+import com.hpg.payment.provider.ProviderDispute;
 import com.hpg.payment.provider.ProviderOrder;
 import com.hpg.payment.provider.ProviderPayment;
 import com.hpg.payment.provider.ProviderPaymentStatus;
 import com.hpg.payment.provider.ProviderRejectedException;
 import com.hpg.payment.provider.ProviderWebhookEvent;
+import com.hpg.payment.provider.razorpay.RazorpayDisputes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,7 +40,9 @@ public class SimulatedPaymentProvider implements PaymentProvider {
     /** Not a secret: signatures exist only so the simulated flow uses the same verification code path. */
     private static final String SIGNING_KEY = "simulated-provider-signing-key";
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
     private final Map<String, SimOrder> orders = new ConcurrentHashMap<>();
+    private final Map<String, ProviderDispute> disputes = new ConcurrentHashMap<>();
     private final Map<String, ProviderPayment> payments = new ConcurrentHashMap<>();
 
     public SimulatedPaymentProvider() {
@@ -105,7 +110,50 @@ public class SimulatedPaymentProvider implements PaymentProvider {
 
     @Override
     public Optional<ProviderWebhookEvent> parseWebhook(String eventId, byte[] rawBody) {
-        return Optional.empty(); // the simulator does not send webhooks; recovery polling converges instead
+        // Payments: the simulator sends no webhooks; recovery polling converges instead. Disputes have no
+        // other channel, so a dispute webhook in Razorpay's format (signed with the simulator's key) is
+        // accepted: scripts/smoke-test-disputes.sh uses it to raise one.
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = JSON.readTree(rawBody);
+            String event = root.path("event").asText();
+            com.fasterxml.jackson.databind.JsonNode dispute = root.path("payload").path("dispute").path("entity");
+            if (!RazorpayDisputes.isDisputeEvent(event) || !dispute.isObject()) {
+                return Optional.empty();
+            }
+            Instant createdAt = root.hasNonNull("created_at") ? Instant.ofEpochSecond(root.get("created_at").asLong()) : null;
+            ProviderDispute parsed = RazorpayDisputes.toDispute(dispute);
+            rememberDispute(parsed);
+            return Optional.of(new ProviderWebhookEvent(eventId, event, createdAt, null, parsed));
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("Webhook body is not valid JSON", e);
+        }
+    }
+
+    @Override
+    public ProviderDispute acceptDispute(String providerDisputeId) {
+        return disputes.compute(providerDisputeId, (id, d) -> {
+            if (d == null) {
+                throw new ProviderRejectedException("acceptDispute", "BAD_REQUEST_ERROR", "Unknown dispute");
+            }
+            return new ProviderDispute(id, d.providerPaymentId(), d.amount(), d.amount(), "LOST", d.reasonCode(),
+                    d.phase(), d.respondBy(), d.createdAt());
+        });
+    }
+
+    @Override
+    public ProviderDispute contestDispute(String providerDisputeId, Money amount, String summary) {
+        return disputes.compute(providerDisputeId, (id, d) -> {
+            if (d == null) {
+                throw new ProviderRejectedException("contestDispute", "BAD_REQUEST_ERROR", "Unknown dispute");
+            }
+            return new ProviderDispute(id, d.providerPaymentId(), d.amount(), d.amountDeducted(), "UNDER_REVIEW",
+                    d.reasonCode(), d.phase(), d.respondBy(), d.createdAt());
+        });
+    }
+
+    /** Disputes raised through a simulated webhook, so accept/contest have something to act on. */
+    public void rememberDispute(ProviderDispute dispute) {
+        disputes.put(dispute.providerDisputeId(), dispute);
     }
 
     @Override

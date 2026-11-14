@@ -1,0 +1,76 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $root := . -}}
+{{- $gw := dict "root" $root "name" "api-gateway" }}
+# Default: nothing may connect to an HPG pod. The policies below open only the paths the design uses.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hpg.fullname" . }}-default-deny
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: hpg
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress]
+{{- range $name, $raw := .Values.services }}
+{{- $ctx := dict "root" $root "name" $name }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hpg.component" $ctx }}
+  labels:
+    {{- include "hpg.labels" $ctx | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "hpg.selectorLabels" $ctx | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    {{- if or (eq $name "api-gateway") (eq $name "dashboard") }}
+    # Public entry points: only from the ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $root.Values.networkPolicy.ingressNamespaceSelector | nindent 14 }}
+      ports:
+        - port: {{ $raw.port }}
+    {{- end }}
+    {{- if eq $name "api-gateway" }}
+    # The dashboard's nginx forwards /api and /oauth2 to the gateway
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "hpg.selectorLabels" (dict "root" $root "name" "dashboard") | nindent 14 }}
+      ports:
+        - port: {{ $raw.port }}
+    {{- else if ne $name "dashboard" }}
+    # Business APIs: only through the gateway
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "hpg.selectorLabels" $gw | nindent 14 }}
+      ports:
+        - port: {{ $raw.port }}
+    {{- end }}
+    {{- if eq $name "merchant-service" }}
+    # Every service reads the token signing keys (JWKS); notification-service reads webhook settings
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: hpg
+              app.kubernetes.io/instance: {{ $root.Release.Name }}
+      ports:
+        - port: {{ $raw.port }}
+    {{- end }}
+    {{- if ne $name "dashboard" }}
+    # Prometheus scrapes /actuator/prometheus
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $root.Values.networkPolicy.monitoringNamespaceSelector | nindent 14 }}
+      ports:
+        - port: {{ default $raw.port $raw.managementPort }}
+    {{- end }}
+{{- end }}
+{{- end }}

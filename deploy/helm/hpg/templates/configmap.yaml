@@ -1,0 +1,44 @@
+{{- $root := . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hpg.fullname" . }}-common
+  labels:
+    app.kubernetes.io/part-of: hpg
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.springProfile | quote }}
+  JAVA_TOOL_OPTIONS: {{ .Values.javaToolOptions | quote }}
+  KAFKA_BOOTSTRAP_SERVERS: {{ .Values.kafka.bootstrapServers | quote }}
+  HPG_MESSAGING_CONSUMER_TOPIC_PARTITIONS: {{ .Values.kafka.topicPartitions | quote }}
+  HPG_MESSAGING_CONSUMER_TOPIC_REPLICAS: {{ .Values.kafka.topicReplicas | quote }}
+  HPG_MESSAGING_CONSUMER_MIN_INSYNC_REPLICAS: {{ .Values.kafka.minInsyncReplicas | quote }}
+  HPG_TOKEN_ISSUER: {{ printf "http://%s:8081" (include "hpg.component" (dict "root" $root "name" "merchant-service")) | quote }}
+  HPG_MERCHANT_SERVICE_URI: {{ printf "http://%s:8081" (include "hpg.component" (dict "root" $root "name" "merchant-service")) | quote }}
+  HPG_TRACE_EXPORT: {{ .Values.tracing.export | quote }}
+  HPG_TRACE_SAMPLING: {{ .Values.tracing.sampling | quote }}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {{ .Values.tracing.endpoint | quote }}
+  {{- if .Values.oidc.enabled }}
+  HPG_OIDC_ISSUER: {{ .Values.oidc.issuer | quote }}
+  HPG_OIDC_JWK_SET_URI: {{ .Values.oidc.jwkSetUri | quote }}
+  HPG_OIDC_AUDIENCE: {{ .Values.oidc.audience | quote }}
+  {{- end }}
+  HPG_PAYMENT_PROVIDER: {{ .Values.paymentProvider | quote }}
+  HPG_CHECKOUT_BASE_URL: {{ .Values.checkoutBaseUrl | quote }}
+  HPG_ALLOW_INSECURE_WEBHOOKS: "false"
+  HPG_EMAIL_FROM: {{ .Values.emailFrom | quote }}
+  SMTP_HOST: {{ .Values.smtp.host | quote }}
+  SMTP_PORT: {{ .Values.smtp.port | quote }}
+  REDIS_HOST: {{ .Values.redis.host | quote }}
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+  {{- range $name, $svc := .Values.services }}
+  {{- if $svc.db }}
+  {{ $svc.db }}_DB_HOST: {{ $root.Values.postgres.host | quote }}
+  {{ $svc.db }}_DB_PORT: {{ $root.Values.postgres.port | quote }}
+  {{ $svc.db }}_DB_SSLMODE: {{ $root.Values.postgres.sslMode | quote }}
+  {{- end }}
+  {{- end }}
+  {{- $routes := dict "PAYMENT" "payment-service" "REFUND" "refund-service" "TRANSACTION" "transaction-service" "NOTIFICATION" "notification-service" "RECON" "reconciliation-service" }}
+  {{- range $env, $name := $routes }}
+  HPG_{{ $env }}_SERVICE_URI: {{ printf "http://%s:%v" (include "hpg.component" (dict "root" $root "name" $name)) (index $root.Values.services $name).port | quote }}
+  {{- end }}

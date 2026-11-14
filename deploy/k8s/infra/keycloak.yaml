@@ -1,0 +1,46 @@
+# Keycloak for dashboard single sign-on, with the Keycloak Operator (https://www.keycloak.org/operator).
+# 2 instances (sessions are replicated between them), state in PostgreSQL (keycloak_db on the CloudNativePG
+# cluster), served under https://app.<domain>/auth through the dashboard (same origin as the app).
+# The HPG chart trusts its tokens via values `oidc.*`; the realm comes from deploy/keycloak/hpg-realm.json
+# (change redirectUris / webOrigins / post.logout.redirect.uris to https://app.<domain>/* before importing:
+#   kubectl create configmap hpg-realm --from-file=deploy/keycloak/hpg-realm.json, then the import below).
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: hpg-keycloak
+spec:
+  instances: 2
+  image: quay.io/keycloak/keycloak:26.0.7
+  db:
+    vendor: postgres
+    host: hpg-postgres-rw
+    database: keycloak_db
+    usernameSecret: { name: hpg-db-keycloak, key: username }
+    passwordSecret: { name: hpg-db-keycloak, key: password }
+  http:
+    httpEnabled: true            # TLS terminates at the ingress; inside the cluster NetworkPolicies apply
+  additionalOptions:
+    - name: http-relative-path
+      value: /auth
+  hostname:
+    hostname: https://app.hpg.example/auth
+    backchannelDynamic: true     # the services fetch keys from http://hpg-keycloak-service:8080
+  proxy:
+    headers: xforwarded
+  ingress:
+    enabled: false               # reached through the dashboard's /auth/ proxy
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { memory: 1536Mi }
+---
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: hpg-realm
+spec:
+  keycloakCRName: hpg-keycloak
+  realm:
+    realm: hpg
+    enabled: true
+    # Paste the content of deploy/keycloak/hpg-realm.json here (with the production URLs), or manage the
+    # realm with the Keycloak admin console / terraform. Kept short here so the realm has one source of truth.

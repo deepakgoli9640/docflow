@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hpg.common.money.Money;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
+import com.hpg.events.dispute.DisputeEventPayload;
 import com.hpg.messaging.consumer.EventMessage;
 import com.hpg.notification.domain.Channel;
 import com.hpg.notification.domain.Notification;
@@ -43,6 +44,11 @@ public class NotificationIntake {
     private static final Map<String, String> REFUND_TYPES = Map.of(
             "RefundCompleted", "refund.completed",
             "RefundFailed", "refund.failed");
+    private static final Map<String, String> DISPUTE_TYPES = Map.of(
+            "DisputeOpened", "dispute.opened",
+            "DisputeFundsDeducted", "dispute.funds_deducted",
+            "DisputeFundsReinstated", "dispute.funds_reinstated",
+            "DisputeResolved", "dispute.resolved");
     private static final Set<String> PATIENT_EMAIL_EVENTS = Set.of("PaymentCaptured", "PaymentFailed", "PaymentExpired");
 
     private final NotificationRepository notifications;
@@ -50,8 +56,11 @@ public class NotificationIntake {
     private final MeterRegistry meters;
     private final Clock clock;
 
+    private final SmsProperties sms;
+
     public NotificationIntake(NotificationRepository notifications, ObjectMapper json, MeterRegistry meters,
-            Clock clock) {
+            Clock clock, SmsProperties sms) {
+        this.sms = sms;
         this.notifications = notifications;
         this.json = json;
         this.meters = meters;
@@ -81,7 +90,31 @@ public class NotificationIntake {
                     p.paymentId(), null, event.aggregateVersion(), c.email(), emailSubject(event.eventType(), p),
                     emailBody(event.eventType(), p), clock.instant()));
         }
+        if (sms.enabled() && PATIENT_EMAIL_EVENTS.contains(event.eventType()) && c != null && c.phone() != null
+                && !c.phone().isBlank()) {
+            created += save(new Notification(p.merchantId(), event.eventId(), event.eventType(), Channel.SMS, type,
+                    p.paymentId(), null, event.aggregateVersion(), c.phone(), null, smsText(event.eventType(), p),
+                    clock.instant()));
+        }
         return created;
+    }
+
+    /**
+     * One short message (under 160 characters): amount and the hospital's bill reference only; no names, no
+     * clinical details, no links (links in SMS are a phishing pattern patients are taught to distrust).
+     */
+    static String smsText(String eventType, PaymentEventPayload p) {
+        String amount = p.amount().currency() + " " + p.amount().amount().toPlainString();
+        String ref = p.merchantReference() == null ? "" : p.merchantReference();
+        if (ref.length() > 30) {
+            ref = ref.substring(0, 30);
+        }
+        return switch (eventType) {
+            case "PaymentCaptured" -> "Payment of " + amount + " received for bill " + ref + ". Thank you.";
+            case "PaymentFailed" -> "Payment of " + amount + " for bill " + ref
+                    + " did not go through. No money was taken. Please contact the hospital.";
+            default -> "Payment link for bill " + ref + " (" + amount + ") has expired. Please contact the hospital.";
+        };
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -101,6 +134,26 @@ public class NotificationIntake {
         putIfPresent(data, "failureCode", r.failureCode());
         putIfPresent(data, "failureReason", r.failureReason());
         return save(webhook(event, type, r.merchantId(), r.paymentId(), r.refundId(), data));
+    }
+
+    /** Disputes: the hospital must react before the provider's deadline, so every step is a webhook. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int onDisputeEvent(EventMessage event, DisputeEventPayload d) {
+        String type = DISPUTE_TYPES.get(event.eventType());
+        if (type == null) {
+            return 0;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("disputeId", d.disputeId());
+        data.put("paymentId", d.paymentId());
+        data.put("providerDisputeId", d.providerDisputeId());
+        data.put("status", d.status());
+        data.put("amount", d.amount());
+        putIfPresent(data, "moneyMoved", d.moneyMoved());
+        putIfPresent(data, "reasonCode", d.reasonCode());
+        putIfPresent(data, "phase", d.phase());
+        putIfPresent(data, "respondBy", d.respondBy());
+        return save(webhook(event, type, d.merchantId(), d.paymentId(), null, data));
     }
 
     private Notification webhook(EventMessage event, String type, UUID merchantId, UUID paymentId, UUID refundId,

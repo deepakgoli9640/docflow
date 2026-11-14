@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+{{- $root := . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "hpg.fullname" . }}
+  labels:
+    app.kubernetes.io/part-of: hpg
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts: [{{ .Values.ingress.apiHost | quote }}, {{ .Values.ingress.dashboardHost | quote }}]
+      secretName: {{ include "hpg.fullname" . }}-tls
+  {{- end }}
+  rules:
+    # Clients and the provider's webhooks reach only the gateway; it is the single entry point.
+    - host: {{ .Values.ingress.apiHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hpg.component" (dict "root" $root "name" "api-gateway") }}
+                port: { name: http }
+    - host: {{ .Values.ingress.dashboardHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "hpg.component" (dict "root" $root "name" "dashboard") }}
+                port: { name: http }
+{{- end }}

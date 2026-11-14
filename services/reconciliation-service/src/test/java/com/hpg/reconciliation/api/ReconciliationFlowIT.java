@@ -184,6 +184,18 @@ class ReconciliationFlowIT {
             assertThat(e.getPayload().at("/payload/mismatched").asInt()).isEqualTo(1);
         });
 
+        // Matched payments (only those) are confirmed to the ledger with their fees, for the settlement posting.
+        var settled = outbox.findAll().stream().filter(e -> "SettlementConfirmed".equals(e.getEventType()))
+                .filter(e -> e.getPayload().at("/payload/batchId").asText().equals(batchId)).toList();
+        assertThat(settled).extracting(e -> e.getPayload().at("/payload/providerReference").asText())
+                .contains(ref("pay_A")).doesNotContain(ref("pay_B"), ref("pay_X"));
+        assertThat(settled).filteredOn(e -> e.getPayload().at("/payload/providerReference").asText().equals(ref("pay_A")))
+                .singleElement().satisfies(e -> {
+                    assertThat(e.getPayload().at("/payload/gross/amount").asText()).isEqualTo("1000.00");
+                    assertThat(e.getPayload().at("/payload/fee/amount").asText()).isEqualTo("20.00");
+                    assertThat(e.getPayload().at("/payload/tax/amount").asText()).isEqualTo("3.60");
+                });
+
         // The same payment settled again in another day's report is a duplicate settlement.
         JsonNode other = awaitCompleted(upload(HEADER + ref("pay_A") + ",payment,order_1,1000.00,0,0,INR,setl_2,,\n",
                 today.minusDays(1), 202).get("id").asText());

@@ -5,6 +5,8 @@ import com.hpg.common.error.ErrorCode;
 public enum PaymentErrorCode implements ErrorCode {
 
     PAYMENT_NOT_FOUND(404, "Payment not found"),
+    DISPUTE_NOT_FOUND(404, "Dispute not found"),
+    DISPUTE_NOT_OPEN(409, "The dispute can no longer be accepted or contested"),
     INVALID_STATE_TRANSITION(409, "Operation not allowed in the payment's current state"),
     DUPLICATE_PAYMENT(409, "A live payment already exists for this merchant reference"),
     REQUEST_IN_PROGRESS(409, "A request with this Idempotency-Key is still being processed"),

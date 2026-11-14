@@ -44,6 +44,10 @@ final class SigningKeyProvider {
                 log.info("Loaded JWT signing key from configured PEM files");
                 return build(publicKey, privateKey);
             }
+            if (config.requireConfiguredKey()) {
+                throw new IllegalStateException("No JWT signing key configured (hpg.security.jwt.private-key-location "
+                        + "and public-key-location). Every replica must sign with the same, persistent key.");
+            }
             log.warn("No JWT signing key configured (hpg.security.jwt.*). Generating an EPHEMERAL key: "
                     + "tokens will be invalid after restart. Never run production like this.");
             KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
@@ -53,6 +57,27 @@ final class SigningKeyProvider {
         } catch (GeneralSecurityException | IOException | JOSEException e) {
             throw new IllegalStateException("Cannot load JWT signing key", e);
         }
+    }
+
+    /**
+     * Public keys of retired signing keys (key rotation): published next to the active key so tokens they
+     * signed stay verifiable until they expire. They are never used to sign.
+     */
+    static java.util.List<RSAKey> previous(SecurityProperties.Jwt config) {
+        java.util.List<RSAKey> keys = new java.util.ArrayList<>();
+        for (Resource location : config.previousPublicKeyLocations()) {
+            try {
+                RSAPublicKey publicKey = (RSAPublicKey) KeyFactory.getInstance("RSA")
+                        .generatePublic(new X509EncodedKeySpec(pemBody(location)));
+                keys.add(new RSAKey.Builder(publicKey).keyIDFromThumbprint().build());
+            } catch (GeneralSecurityException | IOException | JOSEException e) {
+                throw new IllegalStateException("Cannot load previous JWT public key " + location, e);
+            }
+        }
+        if (!keys.isEmpty()) {
+            log.info("Publishing {} retired JWT public key(s) for tokens issued before the last rotation", keys.size());
+        }
+        return keys;
     }
 
     private static RSAKey build(RSAPublicKey publicKey, RSAPrivateKey privateKey) throws JOSEException {

@@ -81,6 +81,7 @@ docs/                        Architecture documentation
 docker compose -f deploy/docker-compose.yml --profile infra --profile core \
   --profile refund --profile transactions --profile notify --profile recon --profile dashboard up -d --build
 #     add `--profile obs` (and HPG_TRACE_EXPORT=true) for Prometheus, Grafana and Jaeger (~170 MB more)
+#     add `--profile auth` for single sign-on (Keycloak); seed-demo-data.sh then also creates SSO users
 ./scripts/seed-demo-data.sh       # optional: demo data + sign-in details for the dashboard
 
 # 3b. ...or only infrastructure in Docker and the service from your IDE / terminal
@@ -111,6 +112,7 @@ docker compose -f deploy/docker-compose.yml --profile '*' down
 | http://localhost:8085/swagger-ui.html | notification-service OpenAPI / Swagger UI |
 | http://localhost:8086/swagger-ui.html | reconciliation-service OpenAPI / Swagger UI |
 | http://localhost:8025 | Mailpit: every email the system sends locally |
+| http://localhost:8090/auth/admin | Keycloak admin console (`auth` profile; user `admin`, password `KC_BOOTSTRAP_ADMIN_PASSWORD` in deploy/env/.env) |
 | http://localhost:3000 | Grafana (`obs` profile): payments, provider, event pipeline, recon & ledger dashboards |
 | http://localhost:9090 | Prometheus (`obs` profile): targets and alert rules |
 | http://localhost:16686 | Jaeger (`obs` profile, `HPG_TRACE_EXPORT=true`): traces across gateway, services and Kafka |
@@ -146,11 +148,19 @@ java scripts/load/LoadTest.java --rate 40 --duration 60 --merchants 8   # JDK on
 
 Results and what limits throughput: [docs/load-test-report.md](docs/load-test-report.md).
 
+## Kubernetes and high availability
+
+A Helm chart ([deploy/helm/hpg](deploy/helm/hpg)) runs every service with 2+ replicas, autoscaling,
+disruption budgets, health probes, zero-downtime rolling updates, NetworkPolicies and hardened pods;
+PostgreSQL (CloudNativePG, synchronous replica) and Kafka (Strimzi, 3 brokers) come from operators. See
+[deploy/k8s/README.md](deploy/k8s/README.md). `./scripts/ha-check.sh` runs the smoke tests against two replicas
+of every service.
+
 ## CI/CD
 
 GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) on every push and pull request:
 build and all tests (Testcontainers), a coverage table in the job summary (JaCoCo reports as artifacts) and
-a gitleaks secret scan. On `master` it also pushes an image per service to GitHub Container Registry:
+a gitleaks secret scan, and Kubernetes manifest validation (helm lint + kubeconform). On `master` it also pushes an image per service to GitHub Container Registry:
 `ghcr.io/<owner>/hpg-<service>:<commit>` and `:latest`.
 
 ### Payment provider

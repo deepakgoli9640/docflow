@@ -35,6 +35,7 @@ startup and less memory — fine locally, not for load tests or production.)
 | `notify` | notification-service, mailpit |
 | `recon` | reconciliation-service (local: settlement window 0 days, so missing items show at once) |
 | `obs` | prometheus, grafana, jaeger |
+| `auth` | keycloak: single sign-on for dashboard users at http://localhost:8090/auth (~500 MB) |
 | `tools` | kafka-ui (optional, ~250 MB) |
 
 ```bash
@@ -144,3 +145,12 @@ actuator on a separate port 9080 that is never published publicly.
 
 Phase 2 ships steps 1–3 (`.github/workflows/ci.yml`); the old `maven-publish.yml` (Java 11) was
 removed. Steps 4–5 arrive in Phase 8.
+
+## Kubernetes
+
+The production deployment is a Helm chart (`deploy/helm/hpg`) plus operator-managed PostgreSQL and Kafka;
+see [deploy/k8s/README.md](../deploy/k8s/README.md). Two ways to try the HA behaviour locally:
+
+- `./scripts/ha-check.sh`: Compose with **two replicas of every service** (`deploy/docker-compose.ha.yml`), then
+  the smoke tests and duplicate checks. About 4.5 GB of RAM.
+- `./scripts/k8s-demo-up.sh`: the chart on a single-node cluster (kind, k3d, minikube or Docker Desktop).

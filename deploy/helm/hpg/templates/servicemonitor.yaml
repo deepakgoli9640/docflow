@@ -1,0 +1,23 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{- $root := . -}}
+{{- range $name, $raw := .Values.services }}
+{{- if ne $name "dashboard" }}
+{{- $ctx := dict "root" $root "name" $name }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "hpg.component" $ctx }}
+  labels:
+    {{- include "hpg.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "hpg.selectorLabels" $ctx | nindent 6 }}
+  endpoints:
+    - port: {{ if $raw.managementPort }}management{{ else }}http{{ end }}
+      path: /actuator/prometheus
+      interval: 15s
+{{- end }}
+{{- end }}
+{{- end }}

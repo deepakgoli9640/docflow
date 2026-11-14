@@ -1,7 +1,9 @@
 package com.hpg.payment.infrastructure.config;
 
 import com.hpg.common.security.Roles;
+import com.hpg.web.security.ExternalIssuerProperties;
 import com.hpg.web.security.HpgJwtAuthenticationConverter;
+import com.hpg.web.security.HpgJwtDecoders;
 import com.hpg.web.security.ProblemDetailsSecurityHandlers;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -44,6 +46,7 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/v1/payments", "/api/v1/payments/**").hasRole(Roles.MERCHANT)
+                        .requestMatchers("/api/v1/disputes", "/api/v1/disputes/**").hasRole(Roles.MERCHANT)
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(rs -> rs
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter))
@@ -58,9 +61,10 @@ public class SecurityConfig {
     /** Keys are fetched lazily from merchant-service and cached; unknown key ids trigger a refetch (rotation). */
     @Bean
     public JwtDecoder jwtDecoder(@Value("${hpg.security.jwk-set-uri}") String jwkSetUri,
-            @Value("${hpg.security.issuer}") String issuer) {
+            @Value("${hpg.security.issuer}") String issuer, ExternalIssuerProperties identityProvider) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
         decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
-        return decoder;
+        // Also people signed in through the identity provider (dashboard SSO), when one is configured.
+        return HpgJwtDecoders.withExternalIssuer(decoder, issuer, identityProvider);
     }
 }

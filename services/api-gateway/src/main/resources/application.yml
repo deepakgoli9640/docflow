@@ -10,6 +10,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       timeout: 500ms
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -83,7 +84,7 @@ spring:
             - id: payment-api
               uri: ${HPG_PAYMENT_SERVICE_URI:http://localhost:8082}
               predicates:
-                - Path=/api/v1/payments,/api/v1/payments/**
+                - Path=/api/v1/payments,/api/v1/payments/**,/api/v1/disputes,/api/v1/disputes/**
               filters:
                 - name: RequestSize
                   args:
@@ -207,6 +208,10 @@ hpg:
     jwt:
       jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
       issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    oidc:                       # dashboard single sign-on (Keycloak); off when HPG_OIDC_ISSUER is empty
+      issuer: ${HPG_OIDC_ISSUER:}
+      jwk-set-uri: ${HPG_OIDC_JWK_SET_URI:}
+      audience: ${HPG_OIDC_AUDIENCE:hpg-api}
 
 management:
   server:
@@ -246,6 +251,15 @@ spring:
   config:
     activate:
       on-profile: docker
+logging:
+  structured:
+    format:
+      console: ecs
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
 logging:
   structured:
     format:

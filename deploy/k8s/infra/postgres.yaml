@@ -1,0 +1,84 @@
+# PostgreSQL for HPG with the CloudNativePG operator (https://cloudnative-pg.io, >= 1.25):
+# 3 instances (1 primary + 2 replicas) in different zones, synchronous replication to at least one replica
+# (a committed payment survives the loss of the primary), automatic failover, continuous WAL archiving.
+# Services connect to "hpg-postgres-rw", which always points at the current primary.
+#
+# One database + one owner role per service, as locally (docs/07-data-model.md). Each role's password comes
+# from a basic-auth Secret named hpg-db-<service> (keys: username, password); the same password goes into
+# hpg-secrets as <SERVICE>_DB_PASSWORD for the application. Create both from your vault.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: hpg-postgres
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+  minSyncReplicas: 1
+  maxSyncReplicas: 1
+  postgresql:
+    parameters:
+      max_connections: "300"          # 6 services x up to 10 replicas x pool 10 would exceed it: size pools/replicas together
+      shared_buffers: 512MB
+      log_min_duration_statement: "500"
+  affinity:
+    topologyKey: topology.kubernetes.io/zone
+  storage:
+    size: 50Gi
+  walStorage:
+    size: 20Gi
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { memory: 2Gi }
+  monitoring:
+    enablePodMonitor: true
+  backup:
+    retentionPolicy: 30d
+    barmanObjectStore:
+      destinationPath: s3://hpg-backups/postgres      # point-in-time recovery for 30 days
+      s3Credentials:
+        inheritFromIAMRole: true
+  managed:
+    roles:
+      - { name: merchant_app,     ensure: present, login: true, passwordSecret: { name: hpg-db-merchant } }
+      - { name: payment_app,      ensure: present, login: true, passwordSecret: { name: hpg-db-payment } }
+      - { name: refund_app,       ensure: present, login: true, passwordSecret: { name: hpg-db-refund } }
+      - { name: transaction_app,  ensure: present, login: true, passwordSecret: { name: hpg-db-transaction } }
+      - { name: notification_app, ensure: present, login: true, passwordSecret: { name: hpg-db-notification } }
+      - { name: recon_app,        ensure: present, login: true, passwordSecret: { name: hpg-db-recon } }
+      - { name: keycloak_app,     ensure: present, login: true, passwordSecret: { name: hpg-db-keycloak } }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-merchant-db }
+spec: { cluster: { name: hpg-postgres }, name: merchant_db, owner: merchant_app }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-payment-db }
+spec: { cluster: { name: hpg-postgres }, name: payment_db, owner: payment_app }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-refund-db }
+spec: { cluster: { name: hpg-postgres }, name: refund_db, owner: refund_app }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-transaction-db }
+spec: { cluster: { name: hpg-postgres }, name: transaction_db, owner: transaction_app }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-notification-db }
+spec: { cluster: { name: hpg-postgres }, name: notification_db, owner: notification_app }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-recon-db }
+spec: { cluster: { name: hpg-postgres }, name: recon_db, owner: recon_app }
+---
+# Keycloak's own database (dashboard single sign-on, deploy/k8s/infra/keycloak.yaml)
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata: { name: hpg-keycloak-db }
+spec: { cluster: { name: hpg-postgres }, name: keycloak_db, owner: keycloak_app }

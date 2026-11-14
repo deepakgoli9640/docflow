@@ -3,6 +3,7 @@ package com.hpg.notification.infrastructure.messaging;
 import com.hpg.events.Topics;
 import com.hpg.events.payment.PaymentEventPayload;
 import com.hpg.events.refund.RefundEventPayload;
+import com.hpg.events.dispute.DisputeEventPayload;
 import com.hpg.messaging.consumer.EventMessage;
 import com.hpg.messaging.consumer.EventParser;
 import com.hpg.messaging.consumer.ProcessedEvents;
@@ -22,6 +23,7 @@ public class NotificationEventsConsumer {
 
     public static final String PAYMENTS_GROUP = "notification-payments";
     public static final String REFUNDS_GROUP = "notification-refunds";
+    public static final String DISPUTES_GROUP = "notification-disputes";
 
     private final EventParser parser;
     private final ProcessedEvents processed;
@@ -54,6 +56,17 @@ public class NotificationEventsConsumer {
         tx.executeWithoutResult(s -> {
             if (processed.markProcessed(REFUNDS_GROUP, event.eventId())) {
                 intake.onRefundEvent(event, payload);
+            }
+        });
+    }
+
+    @KafkaListener(id = DISPUTES_GROUP, topics = Topics.DISPUTE_EVENTS, groupId = DISPUTES_GROUP)
+    public void onDisputeEvent(String value) {
+        EventMessage event = parser.parse(value);
+        DisputeEventPayload payload = event.payloadAs(DisputeEventPayload.class);
+        tx.executeWithoutResult(s -> {
+            if (processed.markProcessed(DISPUTES_GROUP, event.eventId())) {
+                intake.onDisputeEvent(event, payload);
             }
         });
     }

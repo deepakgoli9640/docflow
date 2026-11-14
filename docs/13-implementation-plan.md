@@ -202,6 +202,74 @@ Planned:
 - Final README, sample requests (HTTP files / curl), and `docs/interview-guide.md` (how to explain
   each design decision, likely questions and trade-offs).
 
+## Phase 9 — Production readiness
+
+Four parts, in order: Kubernetes + HA, production security, business features, a real Razorpay sandbox run.
+
+### 9a — Kubernetes and high availability ✅ done (validated statically)
+- Helm chart for the gateway, six services and the dashboard:
+  - 2+ replicas, autoscaling on CPU, disruption budgets, zone/node spreading;
+  - startup, liveness and readiness probes, `preStop` pause and graceful shutdown;
+  - NetworkPolicies, hardened pods, per-service secrets, ingress with TLS (cert-manager), ServiceMonitors, a
+    `helm test`.
+- CloudNativePG (3 instances, synchronous replica, PITR backups), Strimzi Kafka (3 KRaft nodes, RF 3, min ISR 2),
+  Redis values. Topic replication and `min.insync.replicas` are now configurable in the services.
+- Production profile for the gateway (JSON logs), Redis password support, Postgres `sslmode` per service.
+- Verified:
+  - schemas (also in CI);
+  - every image run non-root with a read-only root filesystem and the production profile;
+  - two replicas of every service passing the smoke tests with no duplicates (`scripts/ha-check.sh`).
+- Not verified: an install on a live cluster (kind cannot run in the build environment).
+
+### 9b — Production security ✅ done
+- **Single sign-on** for dashboard users with Keycloak (OIDC Authorization Code + PKCE):
+  - realm as code (`deploy/keycloak/hpg-realm.json`) with password policy, brute-force lockout and optional
+    TOTP;
+  - the `mid` user attribute and an `hpg-api` audience;
+  - a Compose profile `auth`, user provisioning (`scripts/keycloak-users.sh`) and a Keycloak Operator manifest.
+- **The gateway and all six services trust two issuers.** Identity-provider tokens may only grant people's
+  roles (never SERVICE; MERCHANT needs a hospital).
+- Browser-tested: an operations user and a hospital user signed in through Keycloak, with the right view,
+  tenant isolation and a full sign-out.
+- **Signing-key rotation:** the JWKS publishes the active key and retired public keys; tokens name their
+  `kid`; production refuses to start without a configured key.
+- **Secrets and TLS:**
+  - External Secrets manifest (secret manager → Kubernetes Secrets);
+  - HTTPS-only ingress with HSTS, Postgres TLS;
+  - a TLS map per hop in [09 §8](09-security.md).
+- Not done: service-mesh mTLS between services, a penetration test.
+
+### 9c — Business features ✅ done
+- **Settlement postings:**
+  - reconciliation publishes `SettlementConfirmed` for each MATCHED payment;
+  - the ledger books net to `SETTLEMENT_BANK`, fee and tax to `PROVIDER_FEES`, out of `PROVIDER_CLEARING`;
+  - it books once per payment, even if a later report lists the payment again.
+- **Disputes (chargebacks):**
+  - Razorpay `payment.dispute.*` webhooks arrive on the existing signed endpoint and are stored in a
+    `disputes` table;
+  - the status moves forward only: OPEN → UNDER_REVIEW → WON/LOST/CLOSED;
+  - money follows what the provider actually did (`DisputeFundsDeducted` / `DisputeFundsReinstated` on
+    `dispute.events.v1`) and becomes `CHARGEBACK` / `CHARGEBACK_REVERSAL` postings;
+  - refunds are refused (`PAYMENT_DISPUTED`) while a dispute is open;
+  - the hospital gets webhooks for every step and can accept or contest (with an evidence summary) by API or
+    on the dashboard's Disputes page.
+- **Patient SMS:**
+  - receipt, failed and expired messages next to email, with the phone number encrypted at rest;
+  - the `log` provider is used locally (number masked);
+  - MSG91 Flow API with DLT-registered templates in production.
+- **Tests:**
+  - payment-service: dispute lifecycle;
+  - transaction-service: postings for chargebacks and settlements;
+  - refund-service: refunds blocked while a dispute is open;
+  - notification-service: dispute webhooks and SMS;
+  - the MSG91 adapter;
+  - `scripts/smoke-test-phase9.sh` end to end.
+- **Not built:**
+  - evidence document upload (Razorpay's Documents API);
+  - automatic acceptance at the deadline (deliberately left out: a person decides);
+  - an OPS-wide disputes view;
+  - finance email.
+
 ## Testing approach used throughout
 
 | Level | Tools | Notes |

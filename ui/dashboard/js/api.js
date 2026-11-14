@@ -1,6 +1,8 @@
 // API client + session. Everything goes to the same origin; nginx forwards /api, /oauth2 and /checkout
 // to the API gateway, so the browser never needs CORS and the gateway enforces every rule as usual.
 
+import { beginLogin, completeLogin, endSession, refresh as oidcRefresh } from './oidc.js';
+
 const TOKEN_KEY = 'hpg.session';
 
 /** Error carrying the RFC 9457 Problem Details body the services return. */
@@ -17,6 +19,7 @@ export class ApiError extends Error {
 // The client secret is kept in memory only (never in storage), so an expired token can be renewed
 // silently while the tab is open. After a reload the user signs in again once the token expires.
 let credentials = null;
+let refreshToken = null;   // SSO sessions: memory only
 let session = load();
 const listeners = new Set();
 
@@ -70,9 +73,38 @@ async function requestToken(clientId, clientSecret) {
   };
 }
 
+function sessionFromOidc(tokens) {
+  const claims = decodeJwt(tokens.access_token);
+  const roles = claims.roles || [];
+  const role = roles.includes('OPS') ? 'OPS' : roles.includes('MERCHANT') && claims.mid ? 'MERCHANT' : null;
+  refreshToken = tokens.refresh_token || null;
+  return {
+    kind: 'oidc',
+    token: tokens.access_token,
+    idToken: tokens.id_token || null,
+    expiresAt: Date.now() + (tokens.expires_in || 300) * 1000,
+    clientId: claims.preferred_username || claims.email || claims.sub,
+    role,
+    merchantId: claims.mid || null,
+  };
+}
+
 export const auth = {
   get session() { return session; },
   onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  /** Single sign-on (OIDC): leaves the page for the provider's login. */
+  signInWithSso() { return beginLogin(); },
+  /** Finishes an SSO login when the page is the provider's redirect. Returns true if a session started. */
+  async completeSso() {
+    const result = await completeLogin();
+    if (!result) return false;
+    const s = sessionFromOidc(result.tokens);
+    if (!s.role) {
+      throw new ApiError(403, { detail: 'Your account has no dashboard access (needs the MERCHANT role with a hospital, or OPS).' });
+    }
+    save(s);
+    return true;
+  },
   async signIn(clientId, clientSecret, expectedRole) {
     const s = await requestToken(clientId.trim(), clientSecret.trim());
     if (!s.role) throw new ApiError(403, { detail: 'This client has no dashboard access.' });
@@ -86,9 +118,13 @@ export const auth = {
     return s;
   },
   signOut(reason) {
+    const ending = session;
     credentials = null;
+    refreshToken = null;
     save(null);
     if (reason) sessionStorage.setItem('hpg.signout', reason);
+    // A deliberate sign-out of an SSO session also ends it at the provider (otherwise the next click signs in again).
+    if (ending?.kind === 'oidc' && !reason) endSession(ending.idToken);
   },
 };
 
@@ -97,6 +133,16 @@ async function ensureToken() {
   if (credentials) {
     save(await requestToken(credentials.clientId, credentials.clientSecret));
     return session.token;
+  }
+  if (session?.kind === 'oidc') {
+    if (refreshToken) {
+      try {
+        save(sessionFromOidc(await oidcRefresh(refreshToken)));
+        return session.token;
+      } catch { /* refresh token expired or revoked: fall through */ }
+    }
+    await beginLogin({ silent: true });   // the provider's SSO session renews it without a prompt
+    throw new ApiError(401, { detail: 'Renewing your session…' });
   }
   auth.signOut('Your session expired. Please sign in again.');
   throw new ApiError(401, { detail: 'Session expired' });

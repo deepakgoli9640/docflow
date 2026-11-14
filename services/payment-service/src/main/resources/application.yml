@@ -7,7 +7,7 @@ spring:
   application:
     name: payment-service
   datasource:
-    url: jdbc:postgresql://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:5432}/payment_db
+    url: jdbc:postgresql://${PAYMENT_DB_HOST:localhost}:${PAYMENT_DB_PORT:5432}/payment_db?sslmode=${PAYMENT_DB_SSLMODE:prefer}
     username: ${PAYMENT_DB_USER:payment_app}
     password: ${PAYMENT_DB_PASSWORD:}
     hikari:
@@ -53,6 +53,10 @@ hpg:
     # Tokens are issued by merchant-service; payment-service validates them with its public keys.
     jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
     issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    oidc:                       # dashboard single sign-on (Keycloak); off when HPG_OIDC_ISSUER is empty
+      issuer: ${HPG_OIDC_ISSUER:}
+      jwk-set-uri: ${HPG_OIDC_JWK_SET_URI:}
+      audience: ${HPG_OIDC_AUDIENCE:hpg-api}
     encryption-key: ${HPG_ENCRYPTION_KEY:}
   payment:
     # razorpay (needs RAZORPAY_* test keys) | simulated (local demos only, no money moves)

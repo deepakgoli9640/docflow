@@ -11,6 +11,7 @@ import com.hpg.payment.provider.HmacSignatures;
 import com.hpg.payment.provider.PaymentProvider;
 import com.hpg.payment.provider.ProviderAuthenticationException;
 import com.hpg.payment.provider.ProviderOrder;
+import com.hpg.payment.provider.ProviderDispute;
 import com.hpg.payment.provider.ProviderPayment;
 import com.hpg.payment.provider.ProviderPaymentStatus;
 import com.hpg.payment.provider.ProviderRateLimitedException;
@@ -160,6 +161,15 @@ public class RazorpayPaymentProvider implements PaymentProvider {
             JsonNode paymentEntity = root.path("payload").path("payment").path("entity");
             Instant createdAt = root.hasNonNull("created_at") ? Instant.ofEpochSecond(root.get("created_at").asLong())
                     : null;
+            if (RazorpayDisputes.isDisputeEvent(event)) {
+                JsonNode disputeEntity = root.path("payload").path("dispute").path("entity");
+                if (disputeEntity.isMissingNode() || disputeEntity.isNull()) {
+                    return Optional.empty();
+                }
+                ProviderPayment payment = paymentEntity.isObject() ? toPayment(paymentEntity) : null;
+                return Optional.of(new ProviderWebhookEvent(eventId, event, createdAt, payment,
+                        RazorpayDisputes.toDispute(disputeEntity)));
+            }
             if (paymentEntity.isMissingNode() || paymentEntity.isNull()) {
                 return Optional.empty();
             }
@@ -167,6 +177,24 @@ public class RazorpayPaymentProvider implements PaymentProvider {
         } catch (IOException e) {
             throw new IllegalArgumentException("Webhook body is not valid JSON", e);
         }
+    }
+
+    @Override
+    public ProviderDispute acceptDispute(String providerDisputeId) {
+        return RazorpayDisputes.toDispute(call("acceptDispute", () -> http.post()
+                .uri("/v1/disputes/{id}/accept", providerDisputeId).retrieve().body(JsonNode.class)));
+    }
+
+    /** Contest with a written summary; Razorpay also takes document ids (uploaded via its Documents API). */
+    @Override
+    public ProviderDispute contestDispute(String providerDisputeId, Money amount, String summary) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("amount", RazorpayAmounts.toMinorUnits(amount));
+        body.put("summary", summary);
+        body.put("action", "submit");     // "draft" would save without submitting
+        return RazorpayDisputes.toDispute(call("contestDispute", () -> http.patch()
+                .uri("/v1/disputes/{id}/contest", providerDisputeId).contentType(MediaType.APPLICATION_JSON)
+                .body(body).retrieve().body(JsonNode.class)));
     }
 
     @Override

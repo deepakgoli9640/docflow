@@ -46,7 +46,8 @@ public class KafkaMessagingAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaMessagingAutoConfiguration.class);
     private static final List<String> TOPICS = List.of(Topics.PAYMENT_EVENTS, Topics.REFUND_EVENTS,
-            Topics.NOTIFICATION_EVENTS, Topics.LEDGER_EVENTS, Topics.RECONCILIATION_EVENTS);
+            Topics.NOTIFICATION_EVENTS, Topics.LEDGER_EVENTS, Topics.RECONCILIATION_EVENTS,
+            Topics.DISPUTE_EVENTS);
 
     @Bean
     @ConditionalOnMissingBean
@@ -95,13 +96,25 @@ public class KafkaMessagingAutoConfiguration {
     public KafkaAdmin.NewTopics hpgTopics(KafkaConsumerProperties properties) {
         List<org.apache.kafka.clients.admin.NewTopic> topics = new ArrayList<>();
         for (String topic : TOPICS) {
-            topics.add(TopicBuilder.name(topic).partitions(properties.topicPartitions()).build());
-            topics.add(TopicBuilder.name(Topics.dlt(topic)).partitions(1).build());
+            topics.add(topic(topic, properties.topicPartitions(), properties, false));
+            topics.add(topic(Topics.dlt(topic), 1, properties, false));
         }
         // Full-state snapshots: Kafka keeps only the newest per merchant, so replicas can always be rebuilt
         // from the beginning of the topic.
-        topics.add(TopicBuilder.name(Topics.MERCHANT_SNAPSHOTS).partitions(properties.topicPartitions()).compact().build());
-        topics.add(TopicBuilder.name(Topics.dlt(Topics.MERCHANT_SNAPSHOTS)).partitions(1).build());
+        topics.add(topic(Topics.MERCHANT_SNAPSHOTS, properties.topicPartitions(), properties, true));
+        topics.add(topic(Topics.dlt(Topics.MERCHANT_SNAPSHOTS), 1, properties, false));
         return new KafkaAdmin.NewTopics(topics.toArray(org.apache.kafka.clients.admin.NewTopic[]::new));
+    }
+
+    static org.apache.kafka.clients.admin.NewTopic topic(String name, int partitions, KafkaConsumerProperties properties,
+            boolean compact) {
+        TopicBuilder builder = TopicBuilder.name(name).partitions(partitions).replicas(properties.topicReplicas());
+        if (compact) {
+            builder.compact();
+        }
+        if (properties.minInsyncReplicas() > 0) {
+            builder.config("min.insync.replicas", String.valueOf(properties.minInsyncReplicas()));
+        }
+        return builder.build();
     }
 }

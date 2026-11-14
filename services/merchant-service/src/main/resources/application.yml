@@ -8,7 +8,7 @@ spring:
   application:
     name: merchant-service
   datasource:
-    url: jdbc:postgresql://${MERCHANT_DB_HOST:localhost}:${MERCHANT_DB_PORT:5432}/merchant_db
+    url: jdbc:postgresql://${MERCHANT_DB_HOST:localhost}:${MERCHANT_DB_PORT:5432}/merchant_db?sslmode=${MERCHANT_DB_SSLMODE:prefer}
     username: ${MERCHANT_DB_USER:merchant_app}
     password: ${MERCHANT_DB_PASSWORD:}
     hikari:
@@ -48,11 +48,18 @@ spring:
 hpg:
   security:
     issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    oidc:                       # dashboard single sign-on (Keycloak); off when HPG_OIDC_ISSUER is empty
+      issuer: ${HPG_OIDC_ISSUER:}
+      jwk-set-uri: ${HPG_OIDC_JWK_SET_URI:}
+      audience: ${HPG_OIDC_AUDIENCE:hpg-api}
     access-token-ttl: 15m
     encryption-key: ${HPG_ENCRYPTION_KEY:}
     jwt:
       private-key-location: ${HPG_JWT_PRIVATE_KEY_LOCATION:}
       public-key-location: ${HPG_JWT_PUBLIC_KEY_LOCATION:}
+      # Key rotation: public keys of retired signing keys, comma-separated (docs/09-security.md, "Key rotation").
+      previous-public-key-locations: ${HPG_JWT_PREVIOUS_PUBLIC_KEY_LOCATIONS:}
+      require-configured-key: false
     static-clients:
       - client-id: ops-console
         client-secret: ${HPG_OPS_CLIENT_SECRET:}
@@ -133,6 +140,10 @@ spring:
   config:
     activate:
       on-profile: prod
+hpg:
+  security:
+    jwt:
+      require-configured-key: true   # never an ephemeral key in production: replicas must share one key
 springdoc:
   api-docs:
     enabled: false

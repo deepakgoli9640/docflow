@@ -1,0 +1,11 @@
+HPG {{ .Chart.AppVersion }} is deployed as "{{ .Release.Name }}".
+
+  API (gateway):  https://{{ .Values.ingress.apiHost }}
+  Dashboard:      https://{{ .Values.ingress.dashboardHost }}
+
+Check:  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+        helm test {{ .Release.Name }}
+
+Requires (see deploy/k8s/README.md): Postgres at {{ .Values.postgres.host }}, Kafka at
+{{ .Values.kafka.bootstrapServers }}, Redis at {{ .Values.redis.host }}, and the secrets
+"{{ .Values.secrets.existingSecret }}" and "{{ .Values.secrets.jwtSecret }}".

@@ -7,7 +7,7 @@ spring:
   application:
     name: notification-service
   datasource:
-    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/notification_db
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5432}/notification_db?sslmode=${NOTIFICATION_DB_SSLMODE:prefer}
     username: ${NOTIFICATION_DB_USER:notification_app}
     password: ${NOTIFICATION_DB_PASSWORD:}
     hikari:
@@ -61,6 +61,10 @@ hpg:
   security:
     jwk-set-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}/oauth2/jwks
     issuer: ${HPG_TOKEN_ISSUER:http://localhost:8081}
+    oidc:                       # dashboard single sign-on (Keycloak); off when HPG_OIDC_ISSUER is empty
+      issuer: ${HPG_OIDC_ISSUER:}
+      jwk-set-uri: ${HPG_OIDC_JWK_SET_URI:}
+      audience: ${HPG_OIDC_AUDIENCE:hpg-api}
     encryption-key: ${HPG_ENCRYPTION_KEY:}
   notification:
     merchant-service-uri: ${HPG_MERCHANT_SERVICE_URI:http://localhost:8081}
@@ -70,6 +74,16 @@ hpg:
     # Local development only: allow http:// and private-network webhook URLs (same switch as merchant-service).
     allow-insecure-webhooks: ${HPG_ALLOW_INSECURE_WEBHOOKS:false}
     email-from: ${HPG_EMAIL_FROM:payments@hpg.local}
+    sms:                                  # patient text messages (receipt, failed, expired)
+      enabled: ${HPG_SMS_ENABLED:true}
+      provider: ${HPG_SMS_PROVIDER:log}   # log (local: logged with a masked number) | msg91
+      msg91:
+        base-url: ${MSG91_BASE_URL:https://control.msg91.com}
+        auth-key: ${MSG91_AUTH_KEY:}
+        templates:                        # DLT-registered template (flow) ids per message type
+          "[payment.captured]": ${MSG91_TEMPLATE_CAPTURED:}
+          "[payment.failed]": ${MSG91_TEMPLATE_FAILED:}
+          "[payment.expired]": ${MSG91_TEMPLATE_EXPIRED:}
     connect-timeout: 3s
     request-timeout: 10s
     dispatch:
