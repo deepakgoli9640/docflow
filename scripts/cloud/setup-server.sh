@@ -2,13 +2,13 @@
 # One-command setup of a public demo server for HPG on a fresh Ubuntu 22.04 / 24.04 machine
 # (AWS EC2, Google Cloud, Azure, DigitalOcean, Hetzner, ...). Needs about 4 GB RAM and 20 GB disk.
 #
-#   curl -fsSL https://raw.githubusercontent.com/deepakgoli9640/docflow/main/scripts/cloud/setup-server.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/deepakgoli9640/docflow/master/scripts/cloud/setup-server.sh | sudo bash
 #   # or, from a clone:  sudo ./scripts/cloud/setup-server.sh
 #
 # Settings (environment variables, all optional):
 #   DOMAIN=hpg.example.com   your own domain (point its DNS A record at this server first).
 #                            Default: <public-ip>.sslip.io, a free name that resolves to the server's IP.
-#   BRANCH=main              git branch to deploy when the script clones the repository
+#   BRANCH=master              git branch to deploy when the script clones the repository
 #   REPO_URL=...             repository to clone (default: the GitHub repository)
 #   INSTALL_DIR=/opt/hpg     where the repository is cloned
 #   SEED_DEMO_DATA=1         create demo hospitals and payments on the first run (0 to skip)
@@ -22,7 +22,7 @@
 set -euo pipefail
 
 REPO_URL=${REPO_URL:-https://github.com/deepakgoli9640/docflow.git}
-BRANCH=${BRANCH:-main}
+BRANCH=${BRANCH:-master}
 INSTALL_DIR=${INSTALL_DIR:-/opt/hpg}
 SEED_DEMO_DATA=${SEED_DEMO_DATA:-1}
 CADDY_DIR=/opt/hpg-caddy
