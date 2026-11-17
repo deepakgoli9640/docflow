@@ -74,6 +74,19 @@ generates `deploy/env/.env`, builds the services (with your JDK 21 if installed,
 container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
 http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
 
+## Public demo server (cloud)
+
+On a fresh Ubuntu 22.04/24.04 server with about 4 GB RAM (AWS, Google Cloud, Azure, DigitalOcean, ...), open ports
+80 and 443 in its firewall / security group, then run:
+
+```bash
+git clone https://github.com/deepakgoli9640/docflow.git && cd docflow && sudo ./scripts/cloud/setup-server.sh
+```
+
+It installs Docker, builds and starts the stack, and puts Caddy in front with automatic HTTPS. Without a domain the
+site is at `https://<server-ip-with-dashes>.sslip.io`; with your own, run `sudo DOMAIN=hpg.example.com ./scripts/cloud/setup-server.sh`
+after pointing its DNS at the server. Only ports 80/443 are public; payments stay simulated. Run it again to update.
+
 ## Quick start
 
 ```bash
