@@ -105,9 +105,53 @@ local replicas (merchant snapshots) on the hot path, and "not yet" answers such 
   through a Redis deny-list fed by merchant snapshots (D50).
 - Provider webhooks: HMAC over the raw body, inbox dedupe, 48-hour replay window (D62). Hospital webhooks
   are signed (`timestamp.body`); the URL is re-checked against private addresses at every delivery (SSRF,
-  D44).
+  D44). One classifier serves both checks and also catches IPv6 forms that hide an internal IPv4 address
+  (NAT64 `64:ff9b::a9fe:a9fe` is the cloud metadata endpoint).
 - Card data never touches the system: Razorpay's hosted checkout (D12). Patient emails are encrypted at rest
   (AES-256-GCM), and logs mask emails, phones and card numbers (D58).
+
+### Disputes and chargebacks (D79–D81, D83)
+- A dispute is its own aggregate and topic (`dispute.events.v1`). The payment stays `CAPTURED`: it did happen,
+  and the 243-transition state machine stays untouched.
+- Ledger postings follow the money the provider actually moved (`amount_deducted`), not the dispute status:
+  Razorpay usually deducts when the dispute opens, and the ledger must match the provider balance at every
+  moment or reconciliation breaks. Winning books a reversal.
+- Refunds are refused while a dispute is open: a refund plus a lost chargeback would pay the patient twice.
+- Accept/contest need an Idempotency-Key, like capture and cancel: a client whose first call timed out gets
+  the original answer, and the provider never receives the decision twice.
+
+### Resilience between services (D84–D89)
+- **Load shedding** in every service (a semaphore with a short wait, then a fast `503` + `Retry-After`) runs
+  before security. Without it, queues grow until every request is slow and fails anyway.
+- **Database statement timeouts**, so one slow query cannot hold a connection forever.
+- **Gateway circuit breaker per service** that counts outages only (refused, reset, timeout), not 5xx answers:
+  a business error is not "down", and the client keeps the service's problem details.
+- **The gateway retries GETs only.** Writes are retried by the client with its Idempotency-Key; a gateway that
+  retried a POST after a timeout could double a payment.
+- **Dead letters** can be inspected and replayed from one place; consumer deduplication makes replay safe, and
+  every replay is recorded.
+- **Chaos test** (`scripts/chaos-test.sh`) kills containers under load and then checks money invariants, not
+  uptime: every capture booked exactly once, every refund booked once, hospital owed = captured − refunded,
+  ledger balanced. It found a real bug: the in-memory simulated provider lost orders on restart (D88).
+
+### People sign-in and key rotation (D73–D77)
+- Machines (hospital systems) use API keys → client credentials → JWT. People (hospital staff, operations)
+  sign in through Keycloak with OIDC Authorization Code + PKCE; HPG keeps only authorization.
+- Services trust the second issuer with stricter rules (audience `hpg-api`, roles MERCHANT/OPS only,
+  MERCHANT needs `mid`), so a misconfigured identity provider cannot mint service tokens.
+- Access token in sessionStorage, refresh token in memory only, strict CSP: an XSS could steal at most a
+  5-minute token. A backend-for-frontend with cookies is the stronger option if the dashboard grows.
+- Signing keys rotate by publishing retired public keys next to the active one (`kid` in every token header),
+  so tokens in flight stay valid.
+
+### Deployment
+- Docker Compose with profiles for local work, a lite mode for 8 GB laptops, and a one-command public demo
+  server (`scripts/cloud/setup-server.sh`, Caddy with automatic Let's Encrypt HTTPS, Oracle Cloud Always Free).
+- Helm chart for Kubernetes with Postgres and Kafka left to operators (CloudNativePG, Strimzi) or managed
+  services (D68). Each pod gets only the secrets it uses (D69); `preStop` sleep and readiness without the
+  database (D72).
+- HA was verified, not just claimed: `docker-compose.ha.yml` runs two replicas of everything and the smoke
+  tests pass (one outbox relay via advisory lock, one scheduler via ShedLock, shared signing key) (D71).
 
 ### Observability
 - JSON logs with trace id, span id and correlation id. Domain metrics (payments by outcome, stuck payments,
@@ -175,8 +219,13 @@ once there are several teams.
 
 ## 5. Honest limitations (say them before you are asked)
 
-- The Razorpay adapters are tested against WireMock only; they have **not** run against the real sandbox.
-- One machine: no high availability, no multi-region, no managed Kafka or Postgres.
-- The dashboard signs in with client credentials; production needs real user accounts (OIDC).
-- No local TLS, no Alertmanager routing, no SMS, no chargebacks/disputes, no settlement postings to the ledger.
+- The Razorpay adapters are tested against WireMock only; they have **not** run against the real sandbox
+  (see [razorpay-sandbox-checklist.md](razorpay-sandbox-checklist.md) for what would be checked).
+- HA has been tested with two replicas in Compose and the Helm chart is validated, but it has not run on a real
+  multi-node cluster; no multi-region, no managed Kafka or Postgres.
+- No Alertmanager routing: alerts are defined and visible in Prometheus, but nobody gets paged.
+- The webhook SSRF guard resolves the hostname, then the HTTP client resolves it again; a DNS answer that
+  changes in between (rebinding) is a narrow remaining gap. The fix is to connect to the checked IP.
 - Load numbers come from a shared 4-vCPU box with debug-friendly JVM settings; they are a floor, not a capacity.
+- Events have no schema registry; contracts are Java records in `platform/event-contracts`. Fine for one
+  team, the first thing to add with several.
