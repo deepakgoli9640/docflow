@@ -1,9 +1,9 @@
 package com.hpg.merchant.application;
 
 import com.hpg.common.error.BusinessException;
+import com.hpg.common.net.IpAddresses;
 import com.hpg.merchant.domain.MerchantErrorCode;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
@@ -63,9 +63,7 @@ public class WebhookUrlValidator {
         }
         try {
             // For an IP literal this does not perform a DNS lookup.
-            InetAddress address = InetAddress.getByName(h.replace("[", "").replace("]", ""));
-            return address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()
-                    || address.isAnyLocalAddress() || address.isMulticastAddress() || isUniqueLocalIpv6(address);
+            return IpAddresses.isNonPublic(IpAddresses.parseLiteral(h));
         } catch (java.net.UnknownHostException e) {
             return true; // unparseable literal: reject
         }
@@ -73,11 +71,6 @@ public class WebhookUrlValidator {
 
     private static boolean looksLikeIpLiteral(String host) {
         return host.startsWith("[") || host.contains(":") || host.matches("[0-9.]+");
-    }
-
-    private static boolean isUniqueLocalIpv6(InetAddress address) {
-        byte[] bytes = address.getAddress();
-        return bytes.length == 16 && (bytes[0] & 0xFE) == 0xFC; // fc00::/7
     }
 
     private static BusinessException invalid(String detail) {

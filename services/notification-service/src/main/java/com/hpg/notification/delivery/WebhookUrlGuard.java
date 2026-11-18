@@ -1,5 +1,7 @@
 package com.hpg.notification.delivery;
 
+import com.hpg.common.net.IpAddresses;
+
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -8,7 +10,8 @@ import java.util.Locale;
 /**
  * SSRF guard at delivery time. merchant-service validates the URL when it is saved, but DNS can change
  * afterwards (DNS rebinding), so the resolved addresses are checked again right before every delivery:
- * no loopback, private, link-local (cloud metadata) or multicast targets, https only.
+ * no loopback, private, link-local (cloud metadata), reserved or multicast targets (see {@link IpAddresses}),
+ * https only.
  * {@code allowInsecure} (local development) permits http and private addresses.
  */
 public class WebhookUrlGuard {
@@ -50,9 +53,7 @@ public class WebhookUrlGuard {
         }
         try {
             for (InetAddress address : resolver.resolve(uri.getHost())) {
-                if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()
-                        || address.isAnyLocalAddress() || address.isMulticastAddress() || isUniqueLocalV6(address)
-                        || isCarrierGradeNat(address)) {
+                if (IpAddresses.isNonPublic(address)) {
                     throw new UnsafeWebhookUrlException("webhook host resolves to a non-public address");
                 }
             }
@@ -60,16 +61,6 @@ public class WebhookUrlGuard {
             throw new UnsafeWebhookUrlException("webhook host does not resolve");
         }
         return uri;
-    }
-
-    private static boolean isUniqueLocalV6(InetAddress a) {
-        byte[] b = a.getAddress();
-        return b.length == 16 && (b[0] & 0xFE) == 0xFC;
-    }
-
-    private static boolean isCarrierGradeNat(InetAddress a) {
-        byte[] b = a.getAddress();
-        return b.length == 4 && (b[0] & 0xFF) == 100 && (b[1] & 0xC0) == 64;
     }
 
     public static class UnsafeWebhookUrlException extends RuntimeException {

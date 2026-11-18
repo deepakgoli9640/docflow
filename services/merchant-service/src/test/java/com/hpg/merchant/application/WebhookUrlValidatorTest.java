@@ -32,6 +32,10 @@ class WebhookUrlValidatorTest {
             "https://[::1]/hook",
             "https://[fd00::1]/hook",
             "https://0.0.0.0/hook",
+            "https://100.64.0.1/hook",                   // carrier-grade NAT
+            "https://[64:ff9b::a9fe:a9fe]/hook",         // NAT64 form of 169.254.169.254
+            "https://[2002:7f00:1::]/hook",              // 6to4 form of 127.0.0.1
+            "https://[::7f00:1]/hook",                   // IPv4-compatible 127.0.0.1
             "https://metadata.google.internal/hook",
             "https://user:pass@his.example/hook",
             "not a url",
