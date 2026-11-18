@@ -74,6 +74,26 @@ generates `deploy/env/.env`, builds the services (with your JDK 21 if installed,
 container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
 http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
 
+### Low-memory laptops (8 GB RAM)
+
+The full stack needs about 2.1 GB of containers on top of Windows and Docker Desktop, which is too much for
+8 GB. Double-click **`start-hpg-lite.bat`** instead: it builds and starts only the core payment flow (Postgres,
+Kafka, Redis, merchant-service, payment-service, API gateway, dashboard), about **1.3 GB** measured. Hospitals,
+API keys, payments, checkout, capture and cancel work; the Refunds, Transactions, Notifications and
+Reconciliation pages show errors because those services are off. `stop-hpg.bat` stops it.
+
+Also stop Docker Desktop from taking more memory than it needs: create `C:\Users\<you>\.wslconfig` with
+
+```ini
+[wsl2]
+memory=3GB
+swap=4GB
+```
+
+then run `wsl --shutdown` and start Docker Desktop again. Close Chrome tabs and the IDE during the first build.
+To try the other services, run their tests one module at a time (`mvnw.cmd -pl services/refund-service -am verify`)
+or use a cloud machine (GitHub Codespaces, or the public demo server below).
+
 ## Public demo server (cloud)
 
 On a fresh Ubuntu 22.04/24.04 server with about 4 GB RAM (AWS, Google Cloud, Azure, DigitalOcean, ...), open ports

@@ -1,14 +1,27 @@
-# Starts the whole HPG stack on Windows. Launched by start-hpg.bat (double-click it).
+# Starts the HPG stack on Windows. Launched by start-hpg.bat (double-click it).
 # Needs only Docker Desktop. JDK 21 is used for the build if it is installed; otherwise the build
 # runs inside a Maven container, so nothing else has to be installed.
+#
+# -Lite (start-hpg-lite.bat): for laptops with 8 GB RAM. Builds and starts only what the core payment flow
+# needs (Postgres, Kafka, Redis, merchant-service, payment-service, API gateway, dashboard): about 1.3 GB
+# of containers instead of 2.1 GB. Refunds, transactions/ledger, notifications and reconciliation are off.
+param([switch]$Lite)
 
 $ErrorActionPreference = 'Continue'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $root
 
-$compose = @('compose', '-f', 'deploy/docker-compose.yml',
-    '--profile', 'infra', '--profile', 'core', '--profile', 'refund', '--profile', 'transactions',
-    '--profile', 'notify', '--profile', 'recon', '--profile', 'dashboard')
+if ($Lite) {
+    $profiles = 'infra', 'core', 'dashboard'
+    # Only the modules the lite stack runs (and the platform libraries they need).
+    $buildArgs = @('-pl', 'services/merchant-service,services/payment-service,services/api-gateway', '-am')
+} else {
+    $profiles = 'infra', 'core', 'refund', 'transactions', 'notify', 'recon', 'dashboard'
+    $buildArgs = @()
+}
+$compose = @('compose', '-f', 'deploy/docker-compose.yml') + ($profiles | ForEach-Object { '--profile', $_ })
+# Cap the build's memory so it fits next to Docker Desktop on an 8 GB laptop.
+$mavenOpts = '-Xmx1g'
 
 function Step($text) { Write-Host ""; Write-Host "==> $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host ""; Write-Host "ERROR: $text" -ForegroundColor Red; exit 1 }
@@ -64,6 +77,7 @@ if (Test-Path $envFile) {
 }
 
 # ---------------------------------------------------------------- 3. Build the jars
+if ($Lite) { Step 'LITE mode: core payment flow only (for 8 GB RAM laptops)' }
 Step 'Building the services (the first build downloads dependencies and takes several minutes)'
 $javaMajor = 0
 if (Get-Command java -ErrorAction SilentlyContinue) {
@@ -72,18 +86,19 @@ if (Get-Command java -ErrorAction SilentlyContinue) {
 }
 if ($javaMajor -ge 21) {
     Write-Host "Using the installed JDK $javaMajor."
-    & cmd /c 'mvnw.cmd -B -ntp -DskipTests package'
+    $env:MAVEN_OPTS = $mavenOpts
+    & .\mvnw.cmd -B -ntp -DskipTests @buildArgs package
 } else {
     Write-Host 'JDK 21 not found - building inside a Maven container instead.'
     Write-Host 'First run: downloads the Maven image and all dependencies (often 10-20 minutes). Progress follows.'
-    & docker run --rm -v "${root}:/src" -v 'hpg-maven-cache:/root/.m2' -w /src `
-        maven:3.9.9-eclipse-temurin-21 mvn -B -ntp -DskipTests package
+    & docker run --rm -e "MAVEN_OPTS=$mavenOpts" -v "${root}:/src" -v 'hpg-maven-cache:/root/.m2' -w /src `
+        maven:3.9.9-eclipse-temurin-21 mvn -B -ntp -DskipTests @buildArgs package
 }
 if ($LASTEXITCODE -ne 0) { Fail 'The build failed. See the messages above.' }
 Write-Host 'Build finished.'
 
 # ---------------------------------------------------------------- 4. Start the stack
-Step 'Starting all containers and waiting until they are healthy (a few minutes)'
+Step 'Starting the containers and waiting until they are healthy (a few minutes)'
 & docker @compose up -d --build --wait
 if ($LASTEXITCODE -ne 0) {
     & docker @compose ps
@@ -98,7 +113,14 @@ Write-Host ''
 Write-Host '  Dashboard        http://localhost:8090'
 Write-Host '  API gateway      http://localhost:8080'
 Write-Host '  Swagger (pay)    http://localhost:8082/swagger-ui.html'
-Write-Host '  Emails (Mailpit) http://localhost:8025'
+if ($Lite) {
+    Write-Host ''
+    Write-Host 'LITE mode: payments, checkout, hospitals and API keys work. Refunds, Transactions,'
+    Write-Host 'Notifications and Reconciliation pages show errors because those services are not running.'
+    Write-Host 'If the laptop gets slow, limit Docker''s memory: see "Low-memory laptops" in README.md.'
+} else {
+    Write-Host '  Emails (Mailpit) http://localhost:8025'
+}
 Write-Host ''
 Write-Host 'Sign in to the dashboard as Operations with:'
 Write-Host '  Client ID:     ops-console'
