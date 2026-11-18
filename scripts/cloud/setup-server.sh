@@ -33,6 +33,8 @@ fail() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || fail "Run as root: sudo $0"
 command -v apt-get >/dev/null || fail "This script supports Ubuntu/Debian (apt) only."
 export DEBIAN_FRONTEND=noninteractive
+# A fresh server often runs unattended upgrades on first boot: wait for the apt lock instead of failing.
+[[ -f /etc/apt/apt.conf.d/90hpg-lock-timeout ]] || echo 'DPkg::Lock::Timeout "900";' > /etc/apt/apt.conf.d/90hpg-lock-timeout
 
 # ------------------------------------------------------------------ 1. Packages and Docker
 step "Installing packages"

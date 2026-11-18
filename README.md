@@ -112,6 +112,9 @@ stack uses has an ARM64 build): create a `VM.Standard.A1.Flex` instance with 4 O
 24.04 image, add ingress rules for TCP 80 and 443 (source `0.0.0.0/0`) to the subnet's security list, then SSH in
 (`ssh ubuntu@<public-ip>`) and run the command above. The script also opens 80/443 in the iptables rules that
 Oracle's Ubuntu images ship with.
+No SSH needed for the setup: paste [scripts/cloud/oracle-cloud-init.sh](scripts/cloud/oracle-cloud-init.sh) into
+*Show advanced options → Management → Initialization script* when creating the instance, and the server deploys itself
+on first boot (progress in `/var/log/hpg-setup.log`).
 
 ## Quick start
 
