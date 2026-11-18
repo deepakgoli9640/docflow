@@ -107,6 +107,12 @@ It installs Docker, builds and starts the stack, and puts Caddy in front with au
 site is at `https://<server-ip-with-dashes>.sslip.io`; with your own, run `sudo DOMAIN=hpg.example.com ./scripts/cloud/setup-server.sh`
 after pointing its DNS at the server. Only ports 80/443 are public; payments stay simulated. Run it again to update.
 
+**Oracle Cloud Always Free** works well (an Ampere ARM server with 4 cores and 24 GB RAM at no cost; every image the
+stack uses has an ARM64 build): create a `VM.Standard.A1.Flex` instance with 4 OCPUs / 24 GB and the Canonical Ubuntu
+24.04 image, add ingress rules for TCP 80 and 443 (source `0.0.0.0/0`) to the subnet's security list, then SSH in
+(`ssh ubuntu@<public-ip>`) and run the command above. The script also opens 80/443 in the iptables rules that
+Oracle's Ubuntu images ship with.
+
 ## Quick start
 
 ```bash

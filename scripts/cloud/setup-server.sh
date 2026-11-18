@@ -126,6 +126,14 @@ docker run -d --name hpg-caddy --restart unless-stopped --network host \
 if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
     ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null
 fi
+# Oracle Cloud's Ubuntu images ship iptables rules that REJECT everything except SSH (ufw is inactive there).
+if command -v iptables >/dev/null && iptables -S INPUT 2>/dev/null | grep -q -- '-j REJECT'; then
+    for port in 80 443; do
+        rule=(-p tcp -m state --state NEW --dport "$port" -j ACCEPT)
+        iptables -C INPUT "${rule[@]}" 2>/dev/null || iptables -I INPUT 1 "${rule[@]}"
+    done
+    if command -v netfilter-persistent >/dev/null; then netfilter-persistent save >/dev/null 2>&1 || true; fi
+fi
 
 # ------------------------------------------------------------------ 9. Demo data (first run only)
 marker=$APP_DIR/deploy/env/.demo-seeded
