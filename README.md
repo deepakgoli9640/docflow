@@ -115,6 +115,9 @@ Oracle's Ubuntu images ship with.
 No SSH needed for the setup: paste [scripts/cloud/oracle-cloud-init.sh](scripts/cloud/oracle-cloud-init.sh) into
 *Show advanced options → Management → Initialization script* when creating the instance, and the server deploys itself
 on first boot (progress in `/var/log/hpg-setup.log`).
+If Oracle answers **"Out of capacity"** (common for free ARM servers), run
+[scripts/cloud/oracle-launch-retry.sh](scripts/cloud/oracle-launch-retry.sh) in Oracle Cloud Shell instead: it creates the
+instance (with that initialization script) and retries every minute until capacity frees up.
 
 ## Quick start
 
