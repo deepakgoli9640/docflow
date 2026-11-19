@@ -63,7 +63,8 @@ public class PaymentController {
 
     @PostMapping
     @Operation(summary = "Initiate a payment",
-            description = "Requires Idempotency-Key. Returns 201 with a checkoutUrl for the patient. A repeat with the "
+            description = "Requires Idempotency-Key. Returns 201 with a checkoutUrl for the patient. Unless "
+                    + "sendCheckoutLink is false, HPG also emails/texts that link to the customer. A repeat with the "
                     + "same key returns the current payment with header Idempotent-Replayed: true.")
     public ResponseEntity<PaymentResponse> create(MerchantPrincipal principal,
             @Parameter(required = true) @RequestHeader(value = IdempotencyService.HEADER, required = false) String key,
@@ -72,7 +73,7 @@ public class PaymentController {
         PaymentResult result = creation.create(new CreatePaymentCommand(principal.merchantId(),
                 request.merchantReference(), request.amount().toMoney(), request.description(),
                 c == null ? null : new Payment.Customer(c.name(), c.email(), c.phone()), request.returnUrl(),
-                request.expiresInMinutes()), key, request);
+                request.expiresInMinutes(), request.sendsCheckoutLink()), key, request);
         return respond(result, URI.create("/api/v1/payments/" + result.payment().getId()));
     }
 

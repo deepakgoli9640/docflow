@@ -19,8 +19,11 @@ Content-Type: application/json
   "description": "Patient share for bill BILL-2026-000981",
   "customer": { "name": "A Patient", "email": "patient@example.com", "phone": "+919800001234" },
   "returnUrl": "https://his.cityhospital.example/payments/return",
-  "expiresInMinutes": 60
+  "expiresInMinutes": 60,
+  "sendCheckoutLink": true
 }
+### sendCheckoutLink (optional, default true): HPG emails/texts checkoutUrl to the customer.
+### Send false if the hospital delivers the link itself (its own SMS, patient portal, QR code on the bill).
 
 ### Example response (201 Created; Location: /api/v1/payments/{id})
 # {

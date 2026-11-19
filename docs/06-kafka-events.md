@@ -88,7 +88,11 @@ reading the topic from the beginning; Kafka keeps only the latest snapshot per m
 - Kafka headers additionally carry `eventType`, `eventVersion` and W3C `traceparent`, so consumers
   can filter or route without deserialising the payload and traces span services.
 - **PII:** payment events carry patient email/phone only where a downstream consumer needs them
-  (notification). Never card data, never clinical data.
+  (notification): `PaymentInitiated` when the hospital asked HPG to send the checkout link, and
+  `PaymentCaptured` / `PaymentFailed` / `PaymentExpired`. Never card data, never clinical data.
+- **Checkout link:** `PaymentInitiated` may carry an optional `checkoutLink` object
+  (`url`, `expiresAt`, `merchantName`), added within v1. The URL lets anyone holding it pay that one
+  bill, so it is logged masked and only notification-service acts on it.
 
 ## 4. Versioning rules
 

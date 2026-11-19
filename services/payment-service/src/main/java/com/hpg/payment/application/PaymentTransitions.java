@@ -44,9 +44,11 @@ public class PaymentTransitions {
     private final OutboxWriter outbox;
     private final MeterRegistry meters;
     private final Clock clock;
+    private final String checkoutBaseUrl;
 
     public PaymentTransitions(PaymentStatusHistoryRepository history, PaymentOrderRepository orders,
-            OutboxWriter outbox, MeterRegistry meters, Clock clock) {
+            OutboxWriter outbox, MeterRegistry meters, Clock clock, PaymentProperties properties) {
+        this.checkoutBaseUrl = properties.checkoutBaseUrl();
         this.history = history;
         this.orders = orders;
         this.outbox = outbox;
@@ -54,12 +56,26 @@ public class PaymentTransitions {
         this.clock = clock;
     }
 
-    /** Records the creation of a payment (history + PaymentInitiated event). */
+    /**
+     * Records the creation of a payment (history + PaymentInitiated event).
+     *
+     * @param linkSenderName hospital display name when HPG should send the patient the checkout link; null when
+     *                       the hospital delivers the link itself. Without patient contact details nothing is sent.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void created(Payment payment, String causationId) {
+    public void created(Payment payment, String causationId, String linkSenderName) {
         history.save(new PaymentStatusHistory(payment.getId(), null, PaymentStatus.CREATED,
                 TransitionSource.MERCHANT_API, null, causationId, Actors.current(), clock.instant()));
-        publish(payment, PaymentEventType.PaymentInitiated, null, null, causationId);
+        Payment.Customer c = payment.customer();
+        boolean reachable = c != null && (notBlank(c.email()) || notBlank(c.phone()));
+        if (linkSenderName != null && reachable) {
+            var link = new PaymentEventPayload.CheckoutLink(checkoutBaseUrl + "/" + payment.getCheckoutToken(),
+                    payment.getExpiresAt(), linkSenderName);
+            publish(payment, PaymentEventType.PaymentInitiated, null, null, causationId, c, link);
+            meters.counter("payments.checkout_link_requested").increment();
+        } else {
+            publish(payment, PaymentEventType.PaymentInitiated, null, null, causationId);
+        }
         meters.counter("payments.initiated", "capture_mode", payment.getCaptureMode().name()).increment();
     }
 
@@ -105,6 +121,10 @@ public class PaymentTransitions {
         return decision;
     }
 
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
+    }
+
     private static PaymentEventType eventTypeFor(PaymentStatus status) {
         return switch (status) {
             case AUTHORIZED -> PaymentEventType.PaymentAuthorized;
@@ -119,13 +139,18 @@ public class PaymentTransitions {
 
     private void publish(Payment p, PaymentEventType type, PaymentStatus previous, String providerPaymentId,
             String causationId) {
+        publish(p, type, previous, providerPaymentId, causationId,
+                CONTACT_EVENTS.contains(p.getStatus()) ? p.customer() : null, null);
+    }
+
+    private void publish(Payment p, PaymentEventType type, PaymentStatus previous, String providerPaymentId,
+            String causationId, Payment.Customer c, PaymentEventPayload.CheckoutLink link) {
         var order = orders.findFirstByPaymentIdOrderByCreatedAtDesc(p.getId()).orElse(null);
-        Payment.Customer c = CONTACT_EVENTS.contains(p.getStatus()) ? p.customer() : null;
         PaymentEventPayload payload = new PaymentEventPayload(p.getId(), p.getMerchantId(), p.getMerchantReference(),
                 p.amount(), p.getStatus().name(), previous == null ? null : previous.name(), p.getCaptureMode().name(),
                 order == null ? null : order.getProvider(), order == null ? null : order.getProviderOrderId(),
                 providerPaymentId, p.isLateCapture(), p.getFailureCode(), p.getFailureReason(), clock.instant(),
-                c == null ? null : new PaymentEventPayload.Customer(c.name(), c.email(), c.phone()));
+                c == null ? null : new PaymentEventPayload.Customer(c.name(), c.email(), c.phone()), link);
         long version = p.getVersion() == null ? 0 : p.getVersion() + 1;
         outbox.append(Topics.PAYMENT_EVENTS, "Payment", p.getId().toString(), version, p.getMerchantId(),
                 type.name(), PaymentEventType.CURRENT_VERSION, causationId, payload);
