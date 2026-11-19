@@ -452,7 +452,7 @@ Expect `403`.
 | ID | Check | Command | Expect |
 |---|---|---|---|
 | H1 | No token | `curl -s -o /dev/null -w '%{http_code}\n' $GW/api/v1/payments` | `401` |
-| H2 | Forged token | `curl -s -o /dev/null -w '%{http_code}\n' $GW/api/v1/payments -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln'` | `401` |
+| H2 | Forged token | `curl -s -o /dev/null -w '%{http_code}\n' $GW/api/v1/payments -H "Authorization: Bearer $(printf '{"alg":"RS256"}' \| base64).$(printf '{"sub":"x"}' \| base64).c2ln"` | `401` |
 | H3 | Hospital on operations APIs | `curl -s -o /dev/null -w '%{http_code}\n' $GW/api/v1/admin/merchants -H "Authorization: Bearer $TOKEN"` | `403` |
 | H4 | Tenant isolation | Register and activate a second hospital (A1, A3, other variable names), then read `$PID` with its token | `404`, never the other hospital's data |
 | H5 | Suspension | `curl -s -X POST $GW/api/v1/admin/merchants/$MID/suspend -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' -d '{"reason":"test"}'`, wait 5 s, call `$GW/api/v1/payments` with `$TOKEN` | `403 MERCHANT_SUSPENDED` (the existing token is blocked too). Activate again (A3) and it works |

@@ -352,7 +352,8 @@
                 "exec": [
                   "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
                   "pm.test('ACTIVE', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));",
-                  "pm.collectionVariables.unset('hospitalToken');"
+                  "pm.collectionVariables.unset('hospitalToken');",
+                  "setTimeout(() => {}, 4000); // give Kafka a moment to carry the event to the next service"
                 ]
               }
             }
@@ -4711,6 +4712,17 @@
           "name": "Forged token (401)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A well-formed JWT with a made-up signature, built here so no token-like string is committed.",
+                  "const b64url = o => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(o))).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "pm.variables.set('forgedToken', b64url({ alg: 'RS256' }) + '.' + b64url({ sub: 'x', mid: 'x', roles: ['OPS'] }) + '.c2lnbmF0dXJl');"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -4726,7 +4738,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4IiwibWlkIjoieCJ9.c2lnbmF0dXJl"
+                "value": "Bearer {{forgedToken}}"
               }
             ],
             "url": {
@@ -4740,7 +4752,7 @@
                 "payments"
               ]
             },
-            "description": "",
+            "description": "A token signed by someone else is refused, whatever it claims (here the OPS role).",
             "auth": {
               "type": "noauth"
             }

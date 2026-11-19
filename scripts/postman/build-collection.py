@@ -215,7 +215,7 @@ pm.collectionVariables.unset('hospitalToken');
            "Rate limit: 1/s per IP (burst 5)."),
     req("Activate the hospital (OPS)", "POST", "/api/v1/admin/merchants/{{merchantId}}/activate", auth="ops",
         body={"reason": "KYC verified"},
-        tests="pm.test('ACTIVE', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));\npm.collectionVariables.unset('hospitalToken');",
+        tests="pm.test('ACTIVE', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));\npm.collectionVariables.unset('hospitalToken');\n" + wait(4000),
         desc="Operations only. A reason is required and audited. Payments are refused (MERCHANT_NOT_ACTIVE) until this."),
     req("My profile", "GET", "/api/v1/merchants/me",
         tests="pm.test('own hospital', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('merchantId')));",
@@ -507,7 +507,13 @@ Each request should fail in a specific, safe way.
 """, [
     req("No token (401)", "GET", "/api/v1/payments", auth=None, codes=(401,)),
     req("Forged token (401)", "GET", "/api/v1/payments", auth=None, codes=(401,),
-        headers=[("Authorization", "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4IiwibWlkIjoieCJ9.c2lnbmF0dXJl")]),
+        headers=[("Authorization", "Bearer {{forgedToken}}")],
+        pre="""
+// A well-formed JWT with a made-up signature, built here so no token-like string is committed.
+const b64url = o => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(o))).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+pm.variables.set('forgedToken', b64url({ alg: 'RS256' }) + '.' + b64url({ sub: 'x', mid: 'x', roles: ['OPS'] }) + '.c2lnbmF0dXJl');
+""",
+        desc="A token signed by someone else is refused, whatever it claims (here the OPS role)."),
     req("Hospital calls an operations API (403)", "GET", "/api/v1/admin/merchants", codes=(403,)),
     req("Hospital calls reconciliation (403)", "GET", "/api/v1/reconciliation/batches", codes=(403,)),
     req("Another hospital's payment id (404)", "GET", "/api/v1/payments/00000000-0000-4000-8000-000000000000", codes=(404,),
