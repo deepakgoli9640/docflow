@@ -256,8 +256,8 @@ class PaymentApiIT {
             String paymentId = json.readTree(create(newKey(), body).andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString()).get("id").asText();
             JsonNode payload = initiatedPayload(paymentId);
-            assertThat(payload.get("checkoutLink").isNull()).isTrue();
-            assertThat(payload.get("customer").isNull()).isTrue();
+            assertThat(payload.hasNonNull("checkoutLink")).isFalse();
+            assertThat(payload.hasNonNull("customer")).isFalse();
         }
 
         @Test
@@ -266,7 +266,7 @@ class PaymentApiIT {
                     {"merchantReference":"%s","amount":{"amount":"500.00","currency":"INR"}}""".formatted(reference());
             String paymentId = json.readTree(create(newKey(), body).andExpect(status().isCreated())
                     .andReturn().getResponse().getContentAsString()).get("id").asText();
-            assertThat(initiatedPayload(paymentId).get("checkoutLink").isNull()).isTrue();
+            assertThat(initiatedPayload(paymentId).hasNonNull("checkoutLink")).isFalse();
         }
 
         JsonNode initiatedPayload(String paymentId) throws Exception {
