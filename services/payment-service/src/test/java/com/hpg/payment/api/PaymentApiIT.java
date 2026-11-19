@@ -241,6 +241,40 @@ class PaymentApiIT {
     class Creation {
 
         @Test
+        void initiatedEventCarriesTheCheckoutLinkForHpgToSendThePatient() throws Exception {
+            String paymentId = createOk(reference()).get("id").asText();
+            JsonNode payload = initiatedPayload(paymentId);
+            assertThat(payload.at("/checkoutLink/url").asText()).startsWith("http://localhost/checkout/ck_");
+            assertThat(payload.at("/checkoutLink/expiresAt").asText()).isNotBlank();
+            assertThat(payload.at("/checkoutLink/merchantName").asText()).isNotBlank();
+            assertThat(payload.at("/customer/email").asText()).isEqualTo("patient@example.com");
+        }
+
+        @Test
+        void hospitalCanKeepDeliveringTheLinkItself() throws Exception {
+            String body = body(reference(), "20000.00").replace("}}", "},\"sendCheckoutLink\":false}");
+            String paymentId = json.readTree(create(newKey(), body).andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString()).get("id").asText();
+            JsonNode payload = initiatedPayload(paymentId);
+            assertThat(payload.get("checkoutLink").isNull()).isTrue();
+            assertThat(payload.get("customer").isNull()).isTrue();
+        }
+
+        @Test
+        void noLinkIsSentWithoutPatientContactDetails() throws Exception {
+            String body = """
+                    {"merchantReference":"%s","amount":{"amount":"500.00","currency":"INR"}}""".formatted(reference());
+            String paymentId = json.readTree(create(newKey(), body).andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString()).get("id").asText();
+            assertThat(initiatedPayload(paymentId).get("checkoutLink").isNull()).isTrue();
+        }
+
+        JsonNode initiatedPayload(String paymentId) throws Exception {
+            return json.readTree(jdbc.queryForObject("SELECT payload::text FROM outbox_events WHERE aggregate_id = ? "
+                    + "AND event_type = 'PaymentInitiated'", String.class, paymentId)).get("payload");
+        }
+
+        @Test
         void createsPaymentProviderOrderOutboxEventAndHistory() throws Exception {
             create(newKey(), body(reference(), "20000.00"))
                     .andExpect(status().isCreated())
