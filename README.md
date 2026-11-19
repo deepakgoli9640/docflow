@@ -74,6 +74,15 @@ generates `deploy/env/.env`, builds the services (with your JDK 21 if installed,
 container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
 http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
 
+### Postman: every endpoint in one click
+
+With the stack running, double-click **`import-postman.bat`**. It prepares a Postman collection with every API
+endpoint (bodies, automatic OAuth2 tokens, Idempotency-Keys, saved ids, tests) and an *HPG local* environment
+holding the operations secret from `deploy/env/.env`. Paste a Postman API key when asked and both appear in your
+Postman account; press Enter instead to import the two files from `postman/out/` by hand (File > Import).
+`import-postman.bat run` also runs all requests from the command line with newman (needs Node.js).
+Linux/macOS: import `postman/HPG.postman_collection.json` and set `opsClientSecret` in an environment.
+
 ### Low-memory laptops (8 GB RAM)
 
 The full stack needs about 2.1 GB of containers on top of Windows and Docker Desktop, which is too much for

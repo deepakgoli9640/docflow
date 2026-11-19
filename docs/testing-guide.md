@@ -73,6 +73,10 @@ Run these first. If one fails, report it before testing by hand.
 
 ---
 
+> **Prefer Postman?** `import-postman.bat` (Windows) puts every endpoint into Postman, in the order of this guide,
+> with tokens, Idempotency-Keys and expected-result tests built in. *Run collection* executes parts A–J
+> automatically (92 requests). Parts K and L still need the commands below.
+
 ## 3. Session setup
 
 Open one terminal in the repository folder and keep it for all of part 4 (the variables carry over).
@@ -346,9 +350,11 @@ Expect: the webhook is retried with increasing delays (`attempts` grows) and bec
 is back. One that gives up (`DEAD`) can be re-queued by operations:
 `curl -s -X POST $GW/api/v1/admin/notifications/<id>/retry -H "Authorization: Bearer $OPS"`.
 
-**E3. Webhook URL safety**: set `webhookUrl` to `http://169.254.169.254/latest` (cloud metadata) with A5's command.
-Expect: `422`. Locally `HPG_ALLOW_INSECURE_WEBHOOKS=true` allows plain http and private addresses, but never
-link-local/metadata addresses. Delivery re-checks the address each time.
+**E3. Webhook URL safety**: set `webhookUrl` to `https://user:password@hooks.example.com/hpg` with A5's command.
+Expect `422` (no credentials in URLs). Locally `HPG_ALLOW_INSECURE_WEBHOOKS=true` allows plain http and private
+addresses so the Docker receiver works. With `false` (production) `http://169.254.169.254/latest` and other
+private, loopback or link-local addresses are refused with `422`, and delivery re-checks the resolved address
+each time.
 
 ---
 
