@@ -10,7 +10,7 @@ PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 > **Status: all phases complete (2–8)**: the full service architecture runs end to end, with tenant-isolation
 > checks, PII-masked JSON logs, metrics, distributed tracing across HTTP and Kafka, dashboards and alerts,
 > an automated test for every failure scenario, CI with coverage, secret scanning and image publishing, and a
-> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md).
+> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md). Testing every service end to end: [docs/testing-guide.md](docs/testing-guide.md).
 >
 > ```
 > Hospital application ──> API Gateway (auth, routing, rate limiting)
