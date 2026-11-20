@@ -73,6 +73,7 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then 
 generates `deploy/env/.env`, builds the services (with your JDK 21 if installed, otherwise inside a Maven
 container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
 http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
+Double-click **`reset-hpg.bat`** to delete all local data (it asks first) and start again from an empty database.
 
 ### Postman: every endpoint in one click
 
