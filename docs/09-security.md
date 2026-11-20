@@ -122,7 +122,12 @@ with role `SERVICE`. Production: mTLS between services (service mesh) in additio
 HMAC-SHA256 over `timestamp.body` with a per-merchant secret, timestamp header for replay
 protection, event id for dedupe (see [08 §8](08-api-contracts.md)). Webhook URLs must be `https`
 in non-local profiles, and we block private/loopback IP ranges to prevent SSRF against our own
-network.
+network. One classifier (`platform/common` `IpAddresses`) is applied twice: merchant-service checks IP
+literals when the URL is saved, and notification-service checks every resolved address right before each
+delivery (DNS can change after registration). It covers private, loopback, link-local (cloud metadata),
+carrier-grade NAT, benchmarking, multicast and reserved IPv4 ranges, the non-public IPv6 ranges, and IPv6
+forms that embed an IPv4 address (IPv4-compatible, NAT64 `64:ff9b::/96`, 6to4 `2002::/16`). Redirects are
+not followed.
 
 ### Checkout callback
 
