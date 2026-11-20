@@ -1,0 +1,6 @@
+# Findings gitleaks reports in past commits that are known not to be secrets.
+# Each line is a finding's fingerprint (commit:file:rule:line); new findings are never covered.
+# A made-up JWT ("forged token" security test) in two commits of PR #15; it is now built at runtime.
+2d54c5a63e93a7aae5ac165ee2106786a4da089e:scripts/postman/build-collection.py:jwt:510
+2d54c5a63e93a7aae5ac165ee2106786a4da089e:postman/HPG.postman_collection.json:jwt:4729
+488922287707086a05afac2588c25e8d77e9ccb9:docs/testing-guide.md:curl-auth-header:448

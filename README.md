@@ -10,7 +10,7 @@ PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 > **Status: all phases complete (2–8)**: the full service architecture runs end to end, with tenant-isolation
 > checks, PII-masked JSON logs, metrics, distributed tracing across HTTP and Kafka, dashboards and alerts,
 > an automated test for every failure scenario, CI with coverage, secret scanning and image publishing, and a
-> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md).
+> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md). Testing every service end to end: [docs/testing-guide.md](docs/testing-guide.md).
 >
 > ```
 > Hospital application ──> API Gateway (auth, routing, rate limiting)
@@ -73,6 +73,15 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then 
 generates `deploy/env/.env`, builds the services (with your JDK 21 if installed, otherwise inside a Maven
 container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
 http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
+
+### Postman: every endpoint in one click
+
+With the stack running, double-click **`import-postman.bat`**. It prepares a Postman collection with every API
+endpoint (bodies, automatic OAuth2 tokens, Idempotency-Keys, saved ids, tests) and an *HPG local* environment
+holding the operations secret from `deploy/env/.env`. Paste a Postman API key when asked and both appear in your
+Postman account; press Enter instead to import the two files from `postman/out/` by hand (File > Import).
+`import-postman.bat run` also runs all requests from the command line with newman (needs Node.js).
+Linux/macOS: import `postman/HPG.postman_collection.json` and set `opsClientSecret` in an environment.
 
 ### Low-memory laptops (8 GB RAM)
 

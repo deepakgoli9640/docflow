@@ -88,7 +88,8 @@ Content-Type: application/json
     "email": "patient@example.com",
     "phone": "+919800000000"
   },
-  "expiresInMinutes": 60
+  "expiresInMinutes": 60,
+  "sendCheckoutLink": true
 }
 ```
 
@@ -111,8 +112,16 @@ Content-Type: application/json
 }
 ```
 
-Responses mask patient contact data; the full values are only used to prefill checkout and send
-receipts.
+Responses mask patient contact data; the full values are only used to prefill checkout, send the
+checkout link and send receipts.
+
+**Who delivers the checkout link.** `sendCheckoutLink` is optional and defaults to `true`: when the
+`customer` has an email address and/or phone number, notification-service sends the patient the
+`checkoutUrl` by email (subject *Payment request from {hospital} - {merchantReference}*) and, when SMS is
+enabled, by text message (public type `payment.checkout_link`, a DLT-registered template in production).
+Send `false` if the hospital delivers the link through its own SMS, portal or QR code. Either way the
+`checkoutUrl` is returned in the response, so the hospital can always show or resend it. A link whose
+`expiresAt` has passed before notification-service picks up the event is not sent.
 
 ## 4. Refund service
 
