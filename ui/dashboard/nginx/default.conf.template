@@ -6,6 +6,11 @@ server {
     root /usr/share/nginx/html;
     server_tokens off;
 
+    # Resolve the gateway per request, not once at startup: a restarted gateway
+    # container gets a new IP, and a startup-time lookup would keep sending traffic to the old one (502).
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+    set $gateway ${GATEWAY_URL};
+
     # Strict CSP: only our own scripts/styles; no inline script, no third-party origins.
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" always;
     add_header X-Content-Type-Options nosniff always;
@@ -25,7 +30,7 @@ server {
     # nonce-based Content-Security-Policy; the add_header here stops the dashboard's CSP above from being
     # inherited (nginx only inherits add_header into locations that define none).
     location /checkout/ {
-        proxy_pass ${GATEWAY_URL};
+        proxy_pass $gateway;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -44,7 +49,6 @@ server {
     # dashboard's CSP can stay connect-src 'self'. Resolved per request, so the dashboard still starts when
     # no identity provider is deployed (the SSO button is then hidden). Keycloak sends its own CSP.
     location /auth/ {
-        resolver ${NGINX_RESOLVER} valid=30s ipv6=off;
         set $idp ${OIDC_UPSTREAM};
         proxy_pass $idp;
         proxy_set_header Host $http_host;
@@ -57,7 +61,7 @@ server {
     }
 
     location ~ ^/(api|oauth2)/ {
-        proxy_pass ${GATEWAY_URL};
+        proxy_pass $gateway;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;

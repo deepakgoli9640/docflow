@@ -76,7 +76,7 @@ hpg:
     # Local development only: allow http:// and private-network webhook URLs (same switch as merchant-service).
     allow-insecure-webhooks: ${HPG_ALLOW_INSECURE_WEBHOOKS:false}
     email-from: ${HPG_EMAIL_FROM:payments@hpg.local}
-    sms:                                  # patient text messages (receipt, failed, expired)
+    sms:                                  # patient text messages (checkout link, receipt, failed, expired)
       enabled: ${HPG_SMS_ENABLED:true}
       provider: ${HPG_SMS_PROVIDER:log}   # log (local: logged with a masked number) | msg91
       msg91:
@@ -86,6 +86,7 @@ hpg:
           "[payment.captured]": ${MSG91_TEMPLATE_CAPTURED:}
           "[payment.failed]": ${MSG91_TEMPLATE_FAILED:}
           "[payment.expired]": ${MSG91_TEMPLATE_EXPIRED:}
+          "[payment.checkout_link]": ${MSG91_TEMPLATE_CHECKOUT_LINK:}
     connect-timeout: 3s
     request-timeout: 10s
     dispatch:

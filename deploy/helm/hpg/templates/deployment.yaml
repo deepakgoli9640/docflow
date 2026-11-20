@@ -103,7 +103,8 @@ spec:
           {{- else }}
           env:
             - name: GATEWAY_URL
-              value: {{ printf "http://%s:%v" (include "hpg.component" (dict "root" $root "name" "api-gateway")) (index $root.Values.services "api-gateway").port | quote }}
+              # Fully qualified: nginx resolves it at request time and its resolver ignores the pod's DNS search domains.
+              value: {{ printf "http://%s.%s.svc.cluster.local:%v" (include "hpg.component" (dict "root" $root "name" "api-gateway")) $root.Release.Namespace (index $root.Values.services "api-gateway").port | quote }}
             # Single sign-on: the dashboard proxies /auth/ to the identity provider (same origin, strict CSP).
             - name: OIDC_AUTHORITY
               value: {{ ternary "/auth/realms/hpg" "" $root.Values.oidc.enabled | quote }}

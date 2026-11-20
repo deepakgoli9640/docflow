@@ -10,7 +10,7 @@ PostgreSQL · Flyway · Kafka · Redis · Testcontainers · Docker Compose
 > **Status: all phases complete (2–8)**: the full service architecture runs end to end, with tenant-isolation
 > checks, PII-masked JSON logs, metrics, distributed tracing across HTTP and Kafka, dashboards and alerts,
 > an automated test for every failure scenario, CI with coverage, secret scanning and image publishing, and a
-> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md).
+> [load test report](docs/load-test-report.md). Explaining it in an interview: [docs/interview-guide.md](docs/interview-guide.md). Testing every service end to end: [docs/testing-guide.md](docs/testing-guide.md).
 >
 > ```
 > Hospital application ──> API Gateway (auth, routing, rate limiting)
@@ -73,6 +73,57 @@ Install [Docker Desktop](https://www.docker.com/products/docker-desktop/), then 
 generates `deploy/env/.env`, builds the services (with your JDK 21 if installed, otherwise inside a Maven
 container), starts the stack, waits until it is healthy, prints the dashboard sign-in and opens
 http://localhost:8090. Double-click **`stop-hpg.bat`** to stop it.
+
+### Postman: every endpoint in one click
+
+With the stack running, double-click **`import-postman.bat`**. It prepares a Postman collection with every API
+endpoint (bodies, automatic OAuth2 tokens, Idempotency-Keys, saved ids, tests) and an *HPG local* environment
+holding the operations secret from `deploy/env/.env`. Paste a Postman API key when asked and both appear in your
+Postman account; press Enter instead to import the two files from `postman/out/` by hand (File > Import).
+`import-postman.bat run` also runs all requests from the command line with newman (needs Node.js).
+Linux/macOS: import `postman/HPG.postman_collection.json` and set `opsClientSecret` in an environment.
+
+### Low-memory laptops (8 GB RAM)
+
+The full stack needs about 2.1 GB of containers on top of Windows and Docker Desktop, which is too much for
+8 GB. Double-click **`start-hpg-lite.bat`** instead: it builds and starts only the core payment flow (Postgres,
+Kafka, Redis, merchant-service, payment-service, API gateway, dashboard), about **1.3 GB** measured. Hospitals,
+API keys, payments, checkout, capture and cancel work; the Refunds, Transactions, Notifications and
+Reconciliation pages show errors because those services are off. `stop-hpg.bat` stops it.
+
+Also stop Docker Desktop from taking more memory than it needs: create `C:\Users\<you>\.wslconfig` with
+
+```ini
+[wsl2]
+memory=3GB
+swap=4GB
+```
+
+then run `wsl --shutdown` and start Docker Desktop again. Close Chrome tabs and the IDE during the first build.
+To try the other services, run their tests one module at a time (`mvnw.cmd -pl services/refund-service -am verify`)
+or use a cloud machine (GitHub Codespaces, or the public demo server below).
+
+## Public demo server (cloud)
+
+On a fresh Ubuntu 22.04/24.04 server with about 4 GB RAM (AWS, Google Cloud, Azure, DigitalOcean, ...), open ports
+80 and 443 in its firewall / security group, then run:
+
+```bash
+git clone https://github.com/deepakgoli9640/docflow.git && cd docflow && sudo ./scripts/cloud/setup-server.sh
+```
+
+It installs Docker, builds and starts the stack, and puts Caddy in front with automatic HTTPS. Without a domain the
+site is at `https://<server-ip-with-dashes>.sslip.io`; with your own, run `sudo DOMAIN=hpg.example.com ./scripts/cloud/setup-server.sh`
+after pointing its DNS at the server. Only ports 80/443 are public; payments stay simulated. Run it again to update.
+
+**Oracle Cloud Always Free** works well (an Ampere ARM server with 4 cores and 24 GB RAM at no cost; every image the
+stack uses has an ARM64 build): create a `VM.Standard.A1.Flex` instance with 4 OCPUs / 24 GB and the Canonical Ubuntu
+24.04 image, add ingress rules for TCP 80 and 443 (source `0.0.0.0/0`) to the subnet's security list, then SSH in
+(`ssh ubuntu@<public-ip>`) and run the command above. The script also opens 80/443 in the iptables rules that
+Oracle's Ubuntu images ship with.
+No SSH needed for the setup: paste [scripts/cloud/oracle-cloud-init.sh](scripts/cloud/oracle-cloud-init.sh) into
+*Show advanced options → Management → Initialization script* when creating the instance, and the server deploys itself
+on first boot (progress in `/var/log/hpg-setup.log`).
 
 ## Quick start
 

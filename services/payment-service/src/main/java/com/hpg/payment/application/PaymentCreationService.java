@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Payment initiation (docs/02-payment-lifecycle.md §4).
@@ -127,7 +128,8 @@ public class PaymentCreationService {
                 merchant.getCaptureMode(), cmd.description(), cmd.customer(), cmd.returnUrl(),
                 merchant.getMaxAttempts(), now.plus(ttl), MDC.get(CorrelationId.MDC_KEY));
         payments.save(payment);
-        transitions.created(payment, MDC.get(CorrelationId.MDC_KEY));
+        transitions.created(payment, MDC.get(CorrelationId.MDC_KEY),
+                cmd.sendCheckoutLink() ? Objects.requireNonNullElse(merchant.getDisplayName(), "Your hospital") : null);
         idempotency.record(cmd.merchantId(), OPERATION, key, requestHash, payment.getId(), 201);
         return new PaymentResult(payment, 201, false);
     }

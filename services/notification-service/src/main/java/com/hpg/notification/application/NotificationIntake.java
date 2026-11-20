@@ -17,7 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -30,6 +33,8 @@ import java.util.UUID;
  * <ul>
  *   <li>Hospital webhook: every externally relevant payment and refund outcome.</li>
  *   <li>Patient email: payment captured (receipt), failed or expired — only when an address was given.</li>
+ *   <li>Patient checkout link (email and SMS): payment initiated, when the hospital asked HPG to deliver the
+ *       link and gave contact details. No webhook: the hospital already has the link in its API response.</li>
  * </ul>
  */
 @Service
@@ -50,6 +55,11 @@ public class NotificationIntake {
             "DisputeFundsReinstated", "dispute.funds_reinstated",
             "DisputeResolved", "dispute.resolved");
     private static final Set<String> PATIENT_EMAIL_EVENTS = Set.of("PaymentCaptured", "PaymentFailed", "PaymentExpired");
+    static final String CHECKOUT_LINK_TYPE = "payment.checkout_link";
+    private static final DateTimeFormatter EXPIRY_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a z",
+            Locale.ENGLISH);
+
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private final NotificationRepository notifications;
     private final ObjectMapper json;
@@ -69,6 +79,9 @@ public class NotificationIntake {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public int onPaymentEvent(EventMessage event, PaymentEventPayload p) {
+        if ("PaymentInitiated".equals(event.eventType())) {
+            return checkoutLink(event, p);
+        }
         String type = PAYMENT_TYPES.get(event.eventType());
         if (type == null) {
             return 0;
@@ -99,9 +112,60 @@ public class NotificationIntake {
         return created;
     }
 
+    /** Sends the patient the link to pay, by email and (when SMS is on) text message. */
+    private int checkoutLink(EventMessage event, PaymentEventPayload p) {
+        PaymentEventPayload.CheckoutLink link = p.checkoutLink();
+        PaymentEventPayload.Customer c = p.customer();
+        if (link == null || link.url() == null || c == null) {
+            return 0;
+        }
+        if (link.expiresAt() != null && !link.expiresAt().isAfter(clock.instant())) {
+            return 0; // the event arrived after the link stopped working: sending it would only confuse
+        }
+        int created = 0;
+        if (c.email() != null && !c.email().isBlank()) {
+            created += save(new Notification(p.merchantId(), event.eventId(), event.eventType(), Channel.EMAIL,
+                    CHECKOUT_LINK_TYPE, p.paymentId(), null, event.aggregateVersion(), c.email(),
+                    "Payment request from " + link.merchantName() + " - " + p.merchantReference(),
+                    checkoutLinkEmail(p, link), clock.instant()));
+        }
+        if (sms.enabled() && c.phone() != null && !c.phone().isBlank()) {
+            created += save(new Notification(p.merchantId(), event.eventId(), event.eventType(), Channel.SMS,
+                    CHECKOUT_LINK_TYPE, p.paymentId(), null, event.aggregateVersion(), c.phone(), null,
+                    checkoutLinkSms(p, link), clock.instant()));
+        }
+        return created;
+    }
+
+    static String checkoutLinkEmail(PaymentEventPayload p, PaymentEventPayload.CheckoutLink link) {
+        String expiry = link.expiresAt() == null ? ""
+                : "\nThis link works until " + EXPIRY_FORMAT.format(link.expiresAt().atZone(IST)) + ".";
+        return "Hello" + (p.customer().name() == null || p.customer().name().isBlank() ? "" : " " + p.customer().name())
+                + ",\n\n" + link.merchantName() + " has requested a payment of " + p.amount().currency() + " "
+                + p.amount().amount().toPlainString() + " for bill " + p.merchantReference() + ".\n\nPay securely here:\n" + link.url() + "\n" + expiry
+                + "\n\nCard and UPI details are entered on the payment provider's page, never in this email. "
+                + "If you do not recognise this bill, contact " + link.merchantName() + " before paying."
+                + "\n\nThis is an automated message from the hospital's payment service.\n";
+    }
+
+    /**
+     * The one SMS that carries a link, because the hospital asked HPG to deliver it. Sent only through a
+     * DLT-registered template ({@code payment.checkout_link}), which is how Indian carriers whitelist links.
+     */
+    static String checkoutLinkSms(PaymentEventPayload p, PaymentEventPayload.CheckoutLink link) {
+        String amount = p.amount().currency() + " " + p.amount().amount().toPlainString();
+        String ref = p.merchantReference() == null ? "" : p.merchantReference();
+        if (ref.length() > 20) {
+            ref = ref.substring(0, 20);
+        }
+        String sender = link.merchantName().length() > 25 ? link.merchantName().substring(0, 25) : link.merchantName();
+        return sender + ": pay " + amount + " for bill " + ref + " at " + link.url();
+    }
+
     /**
      * One short message (under 160 characters): amount and the hospital's bill reference only; no names, no
-     * clinical details, no links (links in SMS are a phishing pattern patients are taught to distrust).
+     * clinical details, no links (links in SMS are a phishing pattern patients are taught to distrust; the only
+     * exception is the checkout link the hospital explicitly asked us to send, see {@link #checkoutLinkSms}).
      */
     static String smsText(String eventType, PaymentEventPayload p) {
         String amount = p.amount().currency() + " " + p.amount().amount().toPlainString();

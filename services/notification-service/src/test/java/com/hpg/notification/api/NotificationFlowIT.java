@@ -141,6 +141,23 @@ class NotificationFlowIT {
         return paymentId;
     }
 
+    UUID initiatedEvent(Instant expiresAt) throws Exception {
+        return initiatedEvent(Ids.newId(), expiresAt);
+    }
+
+    UUID initiatedEvent(UUID eventId, Instant expiresAt) throws Exception {
+        UUID paymentId = Ids.newId();
+        var payload = new PaymentEventPayload(paymentId, merchantId, "BILL-42", Money.inr("1500.00"), "CREATED", null,
+                "AUTO", null, null, null, false, null, null, Instant.now(),
+                new PaymentEventPayload.Customer("Asha", "asha@example.com", "+919800000000"),
+                new PaymentEventPayload.CheckoutLink("https://pay.example/checkout/ck_abc123", expiresAt,
+                        "City Hospital"));
+        EventEnvelope<PaymentEventPayload> env = new EventEnvelope<>(eventId, "PaymentInitiated", 1, Instant.now(),
+                "payment-service", "Payment", paymentId.toString(), 1, merchantId, "corr", null, payload);
+        kafka.send(Topics.PAYMENT_EVENTS, paymentId.toString(), json.writeValueAsString(env)).get();
+        return paymentId;
+    }
+
     List<Notification> awaitNotifications(UUID paymentId, int count) {
         await().atMost(Duration.ofSeconds(60)).until(() -> notifications.findByPaymentIdOrderByCreatedAtAsc(paymentId).size() >= count);
         return notifications.findByPaymentIdOrderByCreatedAtAsc(paymentId);
@@ -150,6 +167,39 @@ class NotificationFlowIT {
         for (int i = 0; i < 10 && dispatcher.dispatchDue() > 0; i++) {
             // tests use a 1 ms backoff, so retries are due immediately
         }
+    }
+
+    @Test
+    void newPaymentSendsThePatientTheCheckoutLinkByEmailAndSms() throws Exception {
+        UUID paymentId = initiatedEvent(Instant.now().plus(Duration.ofHours(1)));
+
+        List<Notification> created = awaitNotifications(paymentId, 2);
+        assertThat(created).extracting(Notification::getChannel).containsExactlyInAnyOrder(Channel.EMAIL, Channel.SMS);
+        assertThat(created).allSatisfy(n -> {
+            assertThat(n.getPublicEventType()).isEqualTo("payment.checkout_link");
+            assertThat(n.getBody()).contains("https://pay.example/checkout/ck_abc123").contains("BILL-42");
+        });
+        assertThat(created).filteredOn(n -> n.getChannel() == Channel.EMAIL).singleElement().satisfies(n -> {
+            assertThat(n.getSubject()).isEqualTo("Payment request from City Hospital - BILL-42");
+            assertThat(n.getBody()).contains("INR 1500.00").contains("This link works until");
+        });
+        assertThat(created).filteredOn(n -> n.getChannel() == Channel.SMS).singleElement()
+                .satisfies(n -> assertThat(n.getBody()).hasSizeLessThanOrEqualTo(160).doesNotContain("Asha"));
+
+        dispatchUntilQuiet();
+        verify(emails).send(any());
+        // The hospital already has the link in its API response: no webhook for a new payment.
+        assertThat(wiremock.findAll(postRequestedFor(urlEqualTo("/hooks/" + merchantId)))).isEmpty();
+    }
+
+    @Test
+    void anExpiredCheckoutLinkIsNotSent() throws Exception {
+        UUID eventId = Ids.newId();
+        UUID paymentId = initiatedEvent(eventId, Instant.now().minusSeconds(60));
+        await().atMost(Duration.ofSeconds(60)).until(() -> jdbc.queryForObject(
+                "SELECT count(*) FROM processed_events WHERE consumer_group = 'notification-payments' AND event_id = ?",
+                Long.class, eventId) == 1);
+        assertThat(notifications.findByPaymentIdOrderByCreatedAtAsc(paymentId)).isEmpty();
     }
 
     @Test
