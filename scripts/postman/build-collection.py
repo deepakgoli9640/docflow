@@ -456,6 +456,7 @@ The same file twice is refused (409 DUPLICATE_SETTLEMENT_FILE). Samples: samples
         query=[("size", "20", True, ""), ("page", "0", True, "")],
         tests="if (!pm.collectionVariables.get('batchId')) { const b = pm.response.json().content || []; if (b.length) pm.collectionVariables.set('batchId', b[0].id); }"),
     req("Get the batch", "GET", "/api/v1/reconciliation/batches/{{batchId}}", auth="ops",
+        tests="pm.collectionVariables.set('reportDate', pm.response.json().businessDate);",
         desc="Counts of MATCHED, AMOUNT_MISMATCH, MISSING_IN_PROVIDER, MISSING_IN_INTERNAL_SYSTEM and DUPLICATE."),
     req("Open differences in the batch", "GET", "/api/v1/reconciliation/batches/{{batchId}}/records", auth="ops",
         query=[("resolutionStatus", "OPEN"), ("status", "AMOUNT_MISMATCH", True, "Match status")],
@@ -465,8 +466,9 @@ The same file twice is refused (409 DUPLICATE_SETTLEMENT_FILE). Samples: samples
     req("Resolve it", "POST", "/api/v1/reconciliation/records/{{recordId}}/resolve", auth="ops", codes=(200, 409),
         body={"resolutionType": "TIMING_DIFFERENCE", "note": "Settled in the next report", "correctionReference": None},
         desc="resolutionType: PROVIDER_ERROR_RAISED, INTERNAL_CORRECTION_POSTED, TIMING_DIFFERENCE, ACCEPTED_AS_IS."),
-    req("Daily report (JSON)", "GET", "/api/v1/reconciliation/reports/daily", auth="ops", query=[("date", "{{today}}")]),
-    req("Daily report (CSV)", "GET", "/api/v1/reconciliation/reports/daily", auth="ops", query=[("date", "{{today}}")],
+    req("Daily report (JSON)", "GET", "/api/v1/reconciliation/reports/daily", auth="ops", query=[("date", "{{reportDate}}")],
+        desc="For the business date of the batch above. A date with no completed batch is 404 NO_COMPLETED_BATCH."),
+    req("Daily report (CSV)", "GET", "/api/v1/reconciliation/reports/daily", auth="ops", query=[("date", "{{reportDate}}")],
         headers=[("Accept", "text/csv")]),
     req("Run against the provider's settlement API", "POST", "/api/v1/reconciliation/runs", auth="ops",
         codes=(201, 202, 422), body='{\n  "businessDate": "{{today}}"\n}',
@@ -550,7 +552,7 @@ DEFAULTS = {"baseUrl": "http://localhost:8080", "opsClientId": "ops-console",
             "patientPhone": "+919800012345", "simulatorSigningKey": "simulated-provider-signing-key"}
 variables = ["merchantId", "hospitalKeyId", "hospitalKeySecret", "secondKeyId", "paymentKey", "merchantReference",
              "paymentId", "checkoutToken", "providerPaymentId", "refundKey", "refundId", "transactionRef", "notificationId",
-             "providerDisputeId", "disputeId", "contestKey", "batchId", "recordId", "today", "dltTopic", "dltPartition",
+             "providerDisputeId", "disputeId", "contestKey", "batchId", "recordId", "today", "reportDate", "dltTopic", "dltPartition",
              "dltOffset", "hospitalToken", "opsToken"]
 
 collection = {
