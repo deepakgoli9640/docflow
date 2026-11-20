@@ -11,7 +11,8 @@ import java.net.UnknownHostException;
  *
  * <p>Blocks the IPv4 ranges that reach private or reserved networks (RFC 6890 special-purpose registry), the
  * non-public IPv6 ranges, and IPv6 forms that carry an IPv4 address inside them: IPv4-compatible
- * ({@code ::a.b.c.d}), NAT64 ({@code 64:ff9b::/96}) and 6to4 ({@code 2002::/16}). Without that last step
+ * ({@code ::a.b.c.d}), IPv4-translated ({@code ::ffff:0:a.b.c.d}), NAT64 ({@code 64:ff9b::/96}; the local-use
+ * {@code 64:ff9b:1::/48} is refused as a whole) and 6to4 ({@code 2002::/16}). Without that last step
  * {@code 64:ff9b::a9fe:a9fe} would reach the cloud metadata service (169.254.169.254) on an IPv6-only
  * network with NAT64.
  */
@@ -52,7 +53,8 @@ public final class IpAddresses {
         byte[] b = address.getAddress();
         if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()
                 || address.isSiteLocalAddress() || address.isMulticastAddress()
-                || (b[0] & 0xFE) == 0xFC) {              // fc00::/7 unique local
+                || (b[0] & 0xFE) == 0xFC                 // fc00::/7 unique local
+                || isLocalUseNat64(b)) {
             return true;
         }
         byte[] embedded = embeddedIpv4(b);
@@ -64,6 +66,10 @@ public final class IpAddresses {
         if (allZero(b, 0, 12)) {                                         // ::a.b.c.d (IPv4-compatible)
             return slice(b, 12);
         }
+        if (allZero(b, 0, 8) && (b[8] & 0xFF) == 0xFF && (b[9] & 0xFF) == 0xFF
+                && allZero(b, 10, 12)) {                                 // ::ffff:0:a.b.c.d (IPv4-translated)
+            return slice(b, 12);
+        }
         if (b[0] == 0x00 && b[1] == 0x64 && (b[2] & 0xFF) == 0xFF && (b[3] & 0xFF) == 0x9B
                 && allZero(b, 4, 12)) {                                  // 64:ff9b::/96 NAT64
             return slice(b, 12);
@@ -72,6 +78,15 @@ public final class IpAddresses {
             return slice(b, 2);
         }
         return null;
+    }
+
+    /**
+     * 64:ff9b:1::/48 is NAT64 for local use (RFC 8215): never a public destination, and where the IPv4 address
+     * sits inside it depends on the operator's prefix length, so the whole range is refused.
+     */
+    private static boolean isLocalUseNat64(byte[] b) {
+        return b[0] == 0x00 && b[1] == 0x64 && (b[2] & 0xFF) == 0xFF && (b[3] & 0xFF) == 0x9B
+                && b[4] == 0x00 && b[5] == 0x01;
     }
 
     private static boolean allZero(byte[] b, int from, int to) {

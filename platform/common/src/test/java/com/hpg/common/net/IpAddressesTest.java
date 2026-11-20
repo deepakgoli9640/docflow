@@ -22,6 +22,10 @@ class IpAddressesTest {
             "::7f00:1",                  // IPv4-compatible 127.0.0.1
             "64:ff9b::a9fe:a9fe",        // NAT64 169.254.169.254
             "64:ff9b::10.0.0.1",
+            "::ffff:0:7f00:1",           // IPv4-translated 127.0.0.1
+            "::ffff:0:a9fe:a9fe",        // IPv4-translated 169.254.169.254
+            "64:ff9b:1::a9fe:a9fe",      // local-use NAT64
+            "64:ff9b:1:ffff::1",
             "2002:a9fe:a9fe::",          // 6to4 169.254.169.254
             "2002:c0a8:101::1"})         // 6to4 192.168.1.1
     void nonPublic(String ip) throws UnknownHostException {
@@ -32,7 +36,7 @@ class IpAddressesTest {
     @ValueSource(strings = {
             "8.8.8.8", "1.1.1.1", "100.63.255.255", "100.128.0.1", "172.15.0.1", "172.32.0.1",
             "192.0.2.10", "203.0.113.10", "223.255.255.255",
-            "2606:4700:4700::1111", "64:ff9b::808:808", "2002:808:808::"})
+            "2606:4700:4700::1111", "64:ff9b::808:808", "2002:808:808::", "::ffff:0:808:808"})
     void publicAddresses(String ip) throws UnknownHostException {
         assertThat(IpAddresses.isNonPublic(InetAddress.getByName(ip))).as(ip).isFalse();
     }

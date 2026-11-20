@@ -25,7 +25,7 @@ class WebhookUrlGuardTest {
     @ParameterizedTest
     @ValueSource(strings = {"127.0.0.1", "10.1.2.3", "172.16.0.5", "192.168.1.1", "169.254.169.254", "0.0.0.0",
             "100.64.0.1", "::1", "fd00::1", "fe80::1", "224.0.0.1", "0.0.0.1", "198.18.0.1", "240.0.0.1",
-            "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::", "::7f00:1"})
+            "64:ff9b::a9fe:a9fe", "2002:a9fe:a9fe::", "::7f00:1", "::ffff:0:a9fe:a9fe", "64:ff9b:1::a9fe:a9fe"})
     void blocksNonPublicTargetsEvenIfDnsChangedAfterRegistration(String ip) {
         assertThatThrownBy(() -> resolvingTo(ip).check("https://his.hospital.example/hooks"))
                 .isInstanceOf(WebhookUrlGuard.UnsafeWebhookUrlException.class);
