@@ -141,6 +141,10 @@
       "value": ""
     },
     {
+      "key": "reportDate",
+      "value": ""
+    },
+    {
       "key": "dltTopic",
       "value": ""
     },
@@ -3791,7 +3795,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
-                  ""
+                  "pm.collectionVariables.set('reportDate', pm.response.json().businessDate);"
                 ]
               }
             }
@@ -4049,7 +4053,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/reconciliation/reports/daily?date={{today}}",
+              "raw": "{{baseUrl}}/api/v1/reconciliation/reports/daily?date={{reportDate}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -4063,11 +4067,11 @@
               "query": [
                 {
                   "key": "date",
-                  "value": "{{today}}"
+                  "value": "{{reportDate}}"
                 }
               ]
             },
-            "description": "",
+            "description": "For the business date of the batch above. A date with no completed batch is 404 NO_COMPLETED_BATCH.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -4104,7 +4108,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/reconciliation/reports/daily?date={{today}}",
+              "raw": "{{baseUrl}}/api/v1/reconciliation/reports/daily?date={{reportDate}}",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -4118,7 +4122,7 @@
               "query": [
                 {
                   "key": "date",
-                  "value": "{{today}}"
+                  "value": "{{reportDate}}"
                 }
               ]
             },
