@@ -192,10 +192,18 @@ pre-request script, so you never need to call /oauth2/token yourself; these requ
 """, [
     req("Get an operations token (client credentials)", "POST", "/oauth2/token", auth="basic",
         form=[("grant_type", "client_credentials")],
-        tests="pm.test('JWT issued, 15 minutes', () => { const t = pm.response.json(); pm.expect(t.token_type).to.eql('Bearer'); pm.expect(t.expires_in).to.be.above(0); });",
+        tests="""
+if (pm.response.code !== 200) {
+  const secret = pm.variables.get('opsClientSecret');
+  console.error(!secret
+    ? 'opsClientSecret is empty: select the "HPG local" environment and set opsClientSecret to HPG_OPS_CLIENT_SECRET from deploy/env/.env (or run import-postman.bat again after start-hpg.bat).'
+    : 'The operations client id or secret was refused: compare opsClientSecret with HPG_OPS_CLIENT_SECRET in deploy/env/.env.');
+}
+pm.test('JWT issued, 15 minutes', () => { const t = pm.response.json(); pm.expect(t.token_type).to.eql('Bearer'); pm.expect(t.expires_in).to.be.above(0); });
+""",
         desc="OAuth2 client-credentials grant: HTTP Basic with the client id and secret (see the Authorization tab: "
-             "opsClientId / opsClientSecret from the HPG local environment). 401 invalid_client means the secret is "
-             "empty or wrong: select the HPG local environment and check opsClientSecret against HPG_OPS_CLIENT_SECRET "
+             "opsClientId / opsClientSecret from the HPG local environment). 400 invalid_request means the secret is "
+             "empty, 401 invalid_client that it is wrong: select the HPG local environment and check opsClientSecret against HPG_OPS_CLIENT_SECRET "
              "in deploy/env/.env. Rate limit: 5/s per IP (burst 10)."),
     req("Public signing keys (JWKS)", "GET", "/oauth2/jwks", auth=None,
         tests="pm.test('has keys', () => pm.expect(pm.response.json().keys).to.be.an('array').that.is.not.empty);",

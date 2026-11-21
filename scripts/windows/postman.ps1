@@ -33,9 +33,9 @@ if (Test-Path $envFile) {
 }
 $opsSecret = $settings['HPG_OPS_CLIENT_SECRET']
 if (-not $opsSecret) {
-    Write-Host 'deploy\env\.env has no HPG_OPS_CLIENT_SECRET yet (start the stack once with start-hpg.bat).' -ForegroundColor Yellow
-    Write-Host 'The environment is created without it; operations requests will get 401 until you set opsClientSecret.' -ForegroundColor Yellow
-    $opsSecret = ''
+    # Without the secret every operations request fails (400 invalid_request), so stop here.
+    Fail ('deploy\env\.env does not exist yet, or has no HPG_OPS_CLIENT_SECRET.' + [Environment]::NewLine +
+          'Run start-hpg.bat first and wait until it opens the dashboard, then run import-postman.bat again.')
 }
 $baseUrl = if ($env:HPG_BASE_URL) { $env:HPG_BASE_URL.TrimEnd('/') } else { 'http://localhost:8080' }
 Write-Host "Gateway: $baseUrl"

@@ -204,6 +204,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "if (pm.response.code !== 200) {",
+                  "  const secret = pm.variables.get('opsClientSecret');",
+                  "  console.error(!secret",
+                  "    ? 'opsClientSecret is empty: select the \"HPG local\" environment and set opsClientSecret to HPG_OPS_CLIENT_SECRET from deploy/env/.env (or run import-postman.bat again after start-hpg.bat).'",
+                  "    : 'The operations client id or secret was refused: compare opsClientSecret with HPG_OPS_CLIENT_SECRET in deploy/env/.env.');",
+                  "}",
                   "pm.test('JWT issued, 15 minutes', () => { const t = pm.response.json(); pm.expect(t.token_type).to.eql('Bearer'); pm.expect(t.expires_in).to.be.above(0); });"
                 ]
               }
@@ -222,7 +228,7 @@
                 "token"
               ]
             },
-            "description": "OAuth2 client-credentials grant: HTTP Basic with the client id and secret (see the Authorization tab: opsClientId / opsClientSecret from the HPG local environment). 401 invalid_client means the secret is empty or wrong: select the HPG local environment and check opsClientSecret against HPG_OPS_CLIENT_SECRET in deploy/env/.env. Rate limit: 5/s per IP (burst 10).",
+            "description": "OAuth2 client-credentials grant: HTTP Basic with the client id and secret (see the Authorization tab: opsClientId / opsClientSecret from the HPG local environment). 400 invalid_request means the secret is empty, 401 invalid_client that it is wrong: select the HPG local environment and check opsClientSecret against HPG_OPS_CLIENT_SECRET in deploy/env/.env. Rate limit: 5/s per IP (burst 10).",
             "auth": {
               "type": "basic",
               "basic": [
