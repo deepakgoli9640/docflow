@@ -288,7 +288,7 @@ A1-A2  hospital registered and activated (OPS)
 B1     bill created  ──► patient gets email + SMS with the link
 B6     patient pays  ──► CAPTURED ──► receipt email, payment.captured webhook,
                                       ledger: hospital is owed ₹2,000
-D1     ₹500 refunded ──► refund email, refund.completed webhook, hospital owed ₹1,500
+D1     ₹500 refunded ──► refund.completed webhook, hospital owed ₹1,500
 G1     chargeback    ──► dispute OPEN, ₹1,500 deducted, refunds paused
 G5     contested     ──► UNDER_REVIEW
 G9     bank decides  ──► WON, money returned (CHARGEBACK_REVERSAL)
