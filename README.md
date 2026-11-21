@@ -82,7 +82,8 @@ endpoint (bodies, automatic OAuth2 tokens, Idempotency-Keys, saved ids, tests) a
 holding the operations secret from `deploy/env/.env`. Paste a Postman API key when asked and both appear in your
 Postman account; press Enter instead to import the two files from `postman/out/` by hand (File > Import).
 `import-postman.bat run` also runs all requests from the command line with newman (needs Node.js).
-Walkthrough of every request, in order: [docs/postman-guide.md](docs/postman-guide.md).
+Walkthrough of every request, in order: [docs/postman-guide.md](docs/postman-guide.md), or open
+`docs\postman-walkthrough.html` in a browser for a visual version with progress tick-boxes.
 Linux/macOS: import `postman/HPG.postman_collection.json` and set `opsClientSecret` in an environment.
 
 ### Low-memory laptops (8 GB RAM)
