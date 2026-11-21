@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Open this file in a browser. Visual version of docs/postman-guide.md; tick-boxes are saved in your browser only. -->
+<title>HPG Postman Walkthrough</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column; a sticky folder rail; each folder is a numbered lane of request rows. */
+:root{
+  --bg:#f4f6f7; --surface:#ffffff; --sunk:#eaeef0; --line:#d8dfe2;
+  --ink:#14232b; --muted:#566871; --faint:#8a9aa1;
+  --accent:#0c6e72; --accent-soft:#d9eeee; --accent-ink:#ffffff;
+  --get:#1f6fb2; --get-bg:#e1eefa; --post:#1c7a4a; --post-bg:#dff3e7;
+  --put:#8a5a00; --put-bg:#fbeecf; --patch:#7a4bb0; --patch-bg:#efe6fa; --del:#b3261e; --del-bg:#fbe3e1;
+  --ok:#1c7a4a; --ok-bg:#dff3e7; --warn:#9a5b00; --warn-bg:#fdefd5; --bad:#b3261e; --bad-bg:#fbe3e1;
+  --ops:#5b3fa0; --ops-bg:#ece6fa;
+  --f-display:"Sora","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f171b; --surface:#152127; --sunk:#1b2a31; --line:#29393f;
+  --ink:#e4edf0; --muted:#9db0b7; --faint:#6f838a;
+  --accent:#4fc2c3; --accent-soft:#163a3c; --accent-ink:#0b1d20;
+  --get:#7fb8ec; --get-bg:#16293a; --post:#74d09f; --post-bg:#15301f; --put:#e7bd62; --put-bg:#33280f;
+  --patch:#c3a3ef; --patch-bg:#2a2038; --del:#f19089; --del-bg:#3a1d1b;
+  --ok:#74d09f; --ok-bg:#15301f; --warn:#f0bf6a; --warn-bg:#352812; --bad:#f19089; --bad-bg:#3a1d1b;
+  --ops:#c3a3ef; --ops-bg:#2a2038; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f171b; --surface:#152127; --sunk:#1b2a31; --line:#29393f;
+  --ink:#e4edf0; --muted:#9db0b7; --faint:#6f838a;
+  --accent:#4fc2c3; --accent-soft:#163a3c; --accent-ink:#0b1d20;
+  --get:#7fb8ec; --get-bg:#16293a; --post:#74d09f; --post-bg:#15301f; --put:#e7bd62; --put-bg:#33280f;
+  --patch:#c3a3ef; --patch-bg:#2a2038; --del:#f19089; --del-bg:#3a1d1b;
+  --ok:#74d09f; --ok-bg:#15301f; --warn:#f0bf6a; --warn-bg:#352812; --bad:#f19089; --bad-bg:#3a1d1b;
+  --ops:#c3a3ef; --ops-bg:#2a2038; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--f-body);margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(1.9rem,4vw,2.6rem);line-height:1.15}
+h2{font-size:1.35rem}
+h3{font-size:1.02rem}
+p{margin:0}
+code,.mono{font-family:var(--f-mono);font-size:.86em}
+.muted{color:var(--muted)}
+.eyebrow{font:600 .72rem/1 var(--f-body);letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Header */
+header.top{padding-block:40px 28px;border-bottom:1px solid var(--line);background:var(--surface)}
+header.top .wrap{display:grid;gap:18px}
+.lede{max-width:66ch;color:var(--muted);font-size:1.02rem}
+.stats{display:flex;flex-wrap:wrap;gap:10px}
+.stat{display:flex;align-items:baseline;gap:8px;padding:8px 14px;background:var(--sunk);border-radius:8px}
+.stat b{font:600 1.15rem var(--f-display);font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:.86rem}
+.progress{display:grid;gap:6px;max-width:520px}
+.bar{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.progress-row{display:flex;justify-content:space-between;gap:12px;font-size:.86rem;color:var(--muted)}
+.progress-row button{font:inherit;color:var(--muted);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+
+/* Folder rail */
+nav.rail{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+nav.rail .wrap{display:flex;gap:6px;overflow-x:auto;padding-block:10px;scrollbar-width:thin}
+nav.rail a{flex:none;display:flex;align-items:center;gap:6px;text-decoration:none;color:var(--ink);font-size:.84rem;padding:5px 10px 5px 5px;border-radius:99px;background:var(--surface);border:1px solid var(--line)}
+nav.rail a .k{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:600 .75rem var(--f-display)}
+nav.rail a.done .k{background:var(--accent);color:var(--accent-ink)}
+
+main{display:grid;gap:44px;padding-block:32px 64px}
+section{display:grid;gap:16px;scroll-margin-top:64px}
+.sec-head{display:grid;gap:6px}
+
+/* Setup */
+.steps4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;counter-reset:s}
+.step4{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:4px;counter-increment:s}
+.step4::before{content:"Step " counter(s);font:600 .7rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.step4 b{font-family:var(--f-display);font-weight:600}
+.windows{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.win{border-left:3px solid var(--accent);padding:4px 0 4px 12px;display:grid;gap:2px}
+.win .mono{color:var(--accent)}
+
+/* Journey diagram */
+.journey{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;overflow-x:auto}
+.flow{display:flex;align-items:stretch;gap:0;min-width:900px}
+.node{flex:1;display:grid;gap:6px;align-content:start;position:relative;padding:0 6px}
+.node .dot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font:600 .8rem var(--f-display);position:relative;z-index:1}
+.node.warn .dot{background:var(--bad)}
+.node::after{content:"";position:absolute;top:16px;left:40px;right:-6px;height:2px;background:var(--line)}
+.node:last-child::after{display:none}
+.node b{font:600 .9rem var(--f-display)}
+.node small{color:var(--muted);font-size:.78rem;line-height:1.4}
+.node .tag{font:500 .7rem var(--f-mono);color:var(--faint)}
+
+/* Callers */
+.callers{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.caller{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:8px}
+.caller .who{display:flex;align-items:center;gap:8px}
+
+/* Folder */
+.folder{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.folder-head{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;padding:18px 20px;border-bottom:1px solid var(--line)}
+.letter{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font:700 1.2rem var(--f-display)}
+.folder-head .svc{font:500 .78rem var(--f-mono);color:var(--faint)}
+.story{color:var(--muted);max-width:70ch}
+.fcount{font-size:.8rem;color:var(--faint);font-variant-numeric:tabular-nums}
+
+.req{display:grid;grid-template-columns:28px 38px minmax(0,1fr);gap:10px 12px;padding:14px 20px;border-top:1px solid var(--line);align-items:start}
+.req:first-child{border-top:0}
+.req.checked{background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+.req.checked .rname{text-decoration:line-through;text-decoration-color:var(--faint)}
+.req input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent);cursor:pointer}
+.rid{font:600 .8rem var(--f-mono);color:var(--faint);padding-top:2px}
+.rbody{display:grid;gap:6px;min-width:0}
+.rtop{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.rname{font-weight:600}
+.line2{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.path{font:400 .8rem var(--f-mono);color:var(--muted);overflow-wrap:anywhere}
+.m{font:600 .68rem var(--f-mono);padding:2px 6px;border-radius:4px;letter-spacing:.03em}
+.m.GET{color:var(--get);background:var(--get-bg)} .m.POST{color:var(--post);background:var(--post-bg)}
+.m.PUT{color:var(--put);background:var(--put-bg)} .m.PATCH{color:var(--patch);background:var(--patch-bg)}
+.m.DELETE{color:var(--del);background:var(--del-bg)}
+.code{font:600 .7rem var(--f-mono);padding:2px 7px;border-radius:99px;font-variant-numeric:tabular-nums}
+.code.c2{color:var(--ok);background:var(--ok-bg)} .code.c4{color:var(--warn);background:var(--warn-bg)}
+.chip{font:600 .66rem var(--f-body);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px}
+.chip.ops{color:var(--ops);background:var(--ops-bg)}
+.chip.pub{color:var(--muted);background:var(--sunk)}
+.chip.idem{color:var(--accent);background:var(--accent-soft)}
+.rdesc{color:var(--muted);font-size:.92rem;max-width:78ch}
+.rdesc b{color:var(--ink);font-weight:600}
+
+.notes{display:grid;gap:10px;padding:16px 20px;background:var(--sunk);border-top:1px solid var(--line)}
+.note{display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px;font-size:.92rem}
+.note .lbl{font:600 .68rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;padding-top:3px}
+.note.try .lbl{color:var(--accent)} .note.look .lbl{color:var(--get)} .note.idea .lbl{color:var(--patch)} .note.sec .lbl{color:var(--bad)}
+
+/* Explore + troubleshoot */
+.ideas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.idea{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:4px;font-size:.92rem}
+.idea b{font-family:var(--f-display);font-weight:600}
+.trouble{display:grid;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.trouble div{display:grid;grid-template-columns:minmax(140px,220px) minmax(0,1fr);gap:12px;padding:12px 16px;border-top:1px solid var(--line);font-size:.92rem}
+.trouble div:first-child{border-top:0}
+.trouble b{font-weight:600}
+pre.cmd{margin:0;background:var(--sunk);border-radius:8px;padding:10px 12px;overflow-x:auto;font:400 .82rem/1.5 var(--f-mono)}
+footer{border-top:1px solid var(--line);padding-block:20px;color:var(--faint);font-size:.82rem}
+
+@media (max-width:600px){
+  .req{grid-template-columns:24px minmax(0,1fr);padding:12px 14px}
+  .rid{display:none}
+  .note{grid-template-columns:1fr;gap:2px}
+  .trouble div{grid-template-columns:1fr;gap:2px}
+  .folder-head{padding:16px 14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="eyebrow">Healthcare Payment Gateway · Postman collection</span>
+    <h1>Learn every feature by sending requests</h1>
+    <p class="lede">A visual walkthrough of the collection that <code>import-postman.bat</code> loads, request by request and in order. For each one: what it does in business terms, what happens behind the scenes, and what to look at. Tick requests off as you go; your progress stays in this browser.</p>
+    <div class="stats">
+      <div class="stat"><b>90</b><span>requests</span></div>
+      <div class="stat"><b>12</b><span>folders</span></div>
+      <div class="stat"><b>128</b><span>automatic checks</span></div>
+      <div class="stat"><b>~2 h</b><span>going slowly</span></div>
+    </div>
+    <div class="progress" aria-live="polite">
+      <div class="bar"><i id="barFill"></i></div>
+      <div class="progress-row"><span id="progressText">0 of 90 requests done</span><button type="button" id="resetBtn">Clear ticks</button></div>
+    </div>
+  </div>
+</header>
+
+<nav class="rail" aria-label="Folders"><div class="wrap" id="rail"></div></nav>
+
+<main class="wrap">
+  <section id="setup">
+    <div class="sec-head"><span class="eyebrow">Before you start</span><h2>Set up once</h2></div>
+    <div class="steps4">
+      <div class="step4"><b>Start Docker Desktop</b><span class="muted">Wait until it says it is running.</span></div>
+      <div class="step4"><b>Double-click start-hpg.bat</b><span class="muted">First run builds everything: 10–20 minutes. It opens the dashboard when ready.</span></div>
+      <div class="step4"><b>Double-click import-postman.bat</b><span class="muted">Paste a Postman API key, or drag the two files from <code>postman\out</code> into Postman.</span></div>
+      <div class="step4"><b>Pick “HPG local”</b><span class="muted">The environment selector at the top right of Postman.</span></div>
+    </div>
+    <h3 style="margin-top:6px">Keep these open side by side</h3>
+    <div class="windows">
+      <div class="win"><b>Postman</b><span class="muted">Send the requests, read Test Results.</span></div>
+      <div class="win"><b>Mailpit</b><span class="mono">localhost:8025</span><span class="muted">Emails the patient receives.</span></div>
+      <div class="win"><b>Dashboard</b><span class="mono">localhost:8090</span><span class="muted">The same data as hospital and operations staff see it.</span></div>
+      <div class="win"><b>Postman Console</b><span class="muted">Tokens being fetched; errorCode and correlationId of every error.</span></div>
+    </div>
+    <div class="caller" style="gap:6px">
+      <b>Optional: watch the webhooks the hospital receives</b>
+      <pre class="cmd">docker run -d --rm --name hook-receiver --network hpg_default mendhak/http-https-echo:31
+docker logs -f hook-receiver</pre>
+      <span class="muted" style="font-size:.9rem">Without it, webhooks fail and are retried; everything else works.</span>
+    </div>
+  </section>
+
+  <section id="automates">
+    <div class="sec-head"><span class="eyebrow">What the collection does for you</span><h2>Four things you never do by hand</h2></div>
+    <div class="ideas">
+      <div class="idea"><b>Tokens</b><span class="muted">A script fetches the operations and hospital tokens when a request needs one, and renews them before they expire.</span></div>
+      <div class="idea"><b>Idempotency keys</b><span class="muted">Money-moving requests send a fresh key, or a saved one when the point is to show a safe retry.</span></div>
+      <div class="idea"><b>Ids carry over</b><span class="muted">Each response's id is saved for the next requests, so <b>send requests in order</b>.</span></div>
+      <div class="idea"><b>Checks</b><span class="muted">Every request tests its own result. Open the Test Results tab after sending.</span></div>
+    </div>
+    <div class="callers">
+      <div class="caller"><div class="who"><span class="chip pub">Hospital</span><code>hospitalToken</code></div><span class="muted">From the hospital's API key. Its own payments, refunds, disputes, transactions and settings. Never another hospital's data.</span></div>
+      <div class="caller"><div class="who"><span class="chip ops">Operations</span><code>opsToken</code></div><span class="muted">From the <code>ops-console</code> client. Activates and suspends hospitals, ledger, reconciliation, failed notifications, dead letters.</span></div>
+    </div>
+  </section>
+
+  <section id="journey">
+    <div class="sec-head"><span class="eyebrow">The big picture</span><h2>One patient's journey through the collection</h2><p class="muted">Each stop names the requests that drive it.</p></div>
+    <div class="journey"><div class="flow" id="flow"></div></div>
+  </section>
+
+  <div id="folders" style="display:grid;gap:44px"></div>
+
+  <section id="explore">
+    <div class="sec-head"><span class="eyebrow">After one full pass</span><h2>Ideas to explore</h2></div>
+    <div class="ideas">
+      <div class="idea"><b>Break idempotency on purpose</b><span class="muted">Send B1 twice quickly with the same key, then once with a different amount.</span></div>
+      <div class="idea"><b>Use up the attempts</b><span class="muted">Decline the same payment three times (B10) and watch it become FAILED.</span></div>
+      <div class="idea"><b>Hit the daily limit</b><span class="muted">Set dailyLimit to ₹3,000 (A6) and create payments until 422 DAILY_LIMIT_EXCEEDED.</span></div>
+      <div class="idea"><b>One attempt only</b><span class="muted">Set maxAttempts to 1 (A6) and decline once: FAILED at once, and Mailpit shows “Payment not completed”.</span></div>
+      <div class="idea"><b>Survive a Kafka outage</b><span class="muted"><code>docker compose -f deploy/docker-compose.yml pause kafka</code>, pay a payment, unpause, and watch folders E and F catch up.</span></div>
+      <div class="idea"><b>Read every field</b><span class="muted">Swagger for each service: <code>localhost:8081/swagger-ui.html</code> (merchant) to <code>8086</code> (reconciliation).</span></div>
+    </div>
+  </section>
+
+  <section id="trouble">
+    <div class="sec-head"><span class="eyebrow">When something fails</span><h2>Troubleshooting</h2></div>
+    <div class="trouble">
+      <div><b>401 everywhere</b><span class="muted">Select the HPG local environment and check <code>opsClientSecret</code> is set. It comes from <code>deploy\env\.env</code>: run import-postman.bat again after start-hpg.bat has created that file.</span></div>
+      <div><b>403 MERCHANT_NOT_ACTIVE on B1</b><span class="muted">Run A2 first, or wait a few seconds after it.</span></div>
+      <div><b>404 on a {{…}} id</b><span class="muted">An earlier request did not save it. Send the folder again from its first request.</span></div>
+      <div><b>Settlement upload fails</b><span class="muted">Pick <code>samples\settlement\discrepancies.csv</code> by hand in the request's Body tab.</span></div>
+      <div><b>Anything else</b><span class="muted">Note the request name, errorCode and correlationId from the Postman Console, then search the logs:<br><code>docker compose -f deploy/docker-compose.yml logs | findstr &lt;correlationId&gt;</code></span></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">Matches <code>postman/HPG.postman_collection.json</code> and <code>docs/postman-guide.md</code> on master. Payments use the simulated provider: no real money moves.</div></footer>
+
+<script>
+const FLOW = [
+  ["A1–A2","Hospital joins","Registered, then activated by operations"],
+  ["B1","Bill created","Patient gets the link by email and SMS"],
+  ["B6–B7","Patient pays","CAPTURED; receipt email; hospital is owed ₹2,000"],
+  ["D1","₹500 refunded","refund.completed webhook; hospital owed ₹1,500"],
+  ["G1","Chargeback","Dispute OPEN; ₹1,500 deducted; refunds paused",true],
+  ["G5","Contested","UNDER_REVIEW with evidence"],
+  ["G9–G10","Bank decides","WON; money returned (CHARGEBACK_REVERSAL)"],
+  ["H1–H7","Reconciled","Next day: settlement report checked line by line"]
+];
+
+// [id, name, method, path, codes, flags, description]   flags: o=operations, p=public, i=idempotency key
+const F = [
+ {k:"0",t:"Platform: how sign-in works",s:"api-gateway · merchant-service",story:"Every system signs in with OAuth2 client credentials and gets a short-lived token.",r:[
+  ["0.1","Get an operations token","POST","/oauth2/token","200","p","Client id and secret go in HTTP Basic auth. The answer is a JWT <b>valid 15 minutes</b> (<code>expires_in: 900</code>). Every API call then sends <code>Authorization: Bearer &lt;token&gt;</code>."],
+  ["0.2","Public signing keys (JWKS)","GET","/oauth2/jwks","200","p","The public keys that verify our tokens. During a key rotation <b>two keys</b> are listed, so tokens signed with the old one keep working."]],
+  n:[["try","Paste the access_token into jwt.io. You see <code>roles: [\"OPS\"]</code>; a hospital token also carries <code>mid</code>, the hospital's id. <b>Every service takes the hospital from this claim, never from the request</b>: that is how hospitals are kept apart."]]},
+
+ {k:"A",t:"Hospital onboarding",s:"merchant-service",story:"A hospital signs up, the platform checks it (KYC) and switches it on, and the hospital configures how it wants to be paid.",r:[
+  ["A1","Register a hospital","POST","/api/v1/merchants","201","p","Created in <code>PENDING_ACTIVATION</code>. The response holds the first <b>API key</b> and the <b>webhook secret</b>, shown only once and stored hashed. From now on requests run as this hospital."],
+  ["A2","Activate the hospital","POST","/api/v1/admin/merchants/{id}/activate","200","o","Status becomes <code>ACTIVE</code>, with an audited reason. A <b>merchant snapshot</b> goes to Kafka, so payments, refunds and the gateway learn it within seconds. Before this, payments get <code>403 MERCHANT_NOT_ACTIVE</code>."],
+  ["A3","My profile","GET","/api/v1/merchants/me","200","","No id in the URL: <code>/me</code> comes from the token."],
+  ["A4","Update my profile","PATCH","/api/v1/merchants/me","200","","Only the display name and phone can change; legal name and status belong to operations."],
+  ["A5","My configuration","GET","/api/v1/merchants/me/configuration","200","","The defaults every new hospital gets."],
+  ["A6","Set my configuration","PUT","/api/v1/merchants/me/configuration","200","","<b>captureMode</b> (AUTO takes the money when the patient pays; MANUAL waits for the hospital), min/max/daily limits, how long a link works, declines allowed, refund window, webhook URL, patient email and SMS."],
+  ["A7","Create a second API key","POST","/api/v1/merchants/me/api-keys","201","","At most <b>2 active keys</b>: create the new one, switch the app, revoke the old one. No downtime."],
+  ["A8","List my API keys","GET","/api/v1/merchants/me/api-keys","200","","No secrets in the list, ever."],
+  ["A9","Revoke the second API key","DELETE","/api/v1/merchants/me/api-keys/{keyId}","204","","Revoking the <b>last</b> active key is refused (<code>409 LAST_ACTIVE_API_KEY</code>), so a hospital cannot lock itself out."],
+  ["A10","Rotate my webhook signing secret","POST","/api/v1/merchants/me/webhook-secret/rotate","200","","New secret, shown once. The hospital uses it to verify <code>X-HPG-Signature</code> on webhooks."]],
+  n:[["look","Dashboard → sign in as operations → Hospitals: the new hospital is there, ACTIVE."]]},
+
+ {k:"B",t:"Payments and checkout",s:"payment-service",story:"The hospital bills the patient's share, the patient pays from a link on their phone, and the hospital sees the money arrive.",r:[
+  ["B1","Create a payment","POST","/api/v1/payments","201","i","<code>PENDING</code> with a <code>checkoutUrl</code>. <b>Mailpit now has “Payment request from …”</b> with the link, and an SMS is logged with the number masked. <code>merchantReference</code> is the hospital's bill number."],
+  ["B2","Same request again (replay)","POST","/api/v1/payments","201","i","Same key and body: the <b>same payment</b> comes back with <code>Idempotent-Replayed: true</code>. A network retry can never create a second payment."],
+  ["B3","Same key, different body","POST","/api/v1/payments","422","i","<code>IDEMPOTENCY_KEY_REUSED</code>: a key belongs to one request only."],
+  ["B4","Same bill, new key","POST","/api/v1/payments","409","i","<code>DUPLICATE_PAYMENT</code>: one <b>live</b> payment per bill number, whatever the key."],
+  ["B5","Checkout page","GET","/checkout/{token}","200","p","The page the patient sees. Open the <code>checkoutUrl</code> in a browser too: three buttons for the simulated provider."],
+  ["B6","Patient pays","POST","/checkout/{token}/simulate","200 302","p","Same as clicking <b>Pay</b>. The provider confirms; with AUTO capture the money is taken."],
+  ["B7","Get the payment","GET","/api/v1/payments/{id}","200","","<code>CAPTURED</code>, with every attempt and the provider's payment id. Mailpit: <b>“Payment received”</b>. Hook receiver: <code>payment.captured</code>."],
+  ["B8","List payments","GET","/api/v1/payments?status=CAPTURED","200","","Filters: status, bill number, from/to, paging. Tick the disabled query params in Postman to try them."],
+  ["B9","Payment declined","POST","/api/v1/payments","201","i","A second payment, for the decline demo."],
+  ["B10","Patient's bank declines","POST","/checkout/{token}/simulate","200 302","p","Stays <code>PENDING</code> so the patient can retry; becomes <code>FAILED</code> after 3 declines."],
+  ["B11","Checkout callback","POST","/checkout/{token}/callback","400 422","p","Where the real provider sends the patient back. A wrong signature is refused."],
+  ["B12","Payment that expires in 1 minute","POST","/api/v1/payments","201","i","Don't pay it. After about 2 minutes it is <code>EXPIRED</code> and Mailpit has <b>“Payment link expired”</b>. The expiry job checks with the provider first."]],
+  n:[["idea","<b>Behind the scenes:</b> payment-service saves the payment <b>and</b> an event in one database transaction (the outbox). A relay publishes it to Kafka, and refund-service, transaction-service and notification-service each react."],
+     ["try","On the checkout page click <b>Pay, but lose the callback</b>. The payment shows PENDING, then CAPTURED within about 2 minutes: the recovery job asked the provider."]]},
+
+ {k:"C",t:"Manual capture and cancel",s:"payment-service",story:"Some hospitals confirm the amount after treatment: the money is reserved when the patient pays and taken when the hospital captures.",r:[
+  ["C1","Switch to MANUAL capture","PUT","/api/v1/merchants/me/configuration","200","","The script waits 3 seconds for the change to reach payment-service through Kafka."],
+  ["C2","Create a payment to capture","POST","/api/v1/payments","201","i","<code>sendCheckoutLink: false</code>, so no email this time."],
+  ["C3","Patient pays","POST","/checkout/{token}/simulate","200 302","p",""],
+  ["C4","Authorized, not captured yet","GET","/api/v1/payments/{id}","200","","<code>AUTHORIZED</code>: reserved, not taken."],
+  ["C5","Capture the payment","POST","/api/v1/payments/{id}/capture","200","i","<code>CAPTURED</code>. If the provider times out, the payment becomes <code>UNKNOWN</code> and is <b>checked with the provider before any retry</b>. Never a double charge."],
+  ["C6","Create a payment to cancel","POST","/api/v1/payments","201","i",""],
+  ["C7","Cancel the payment","POST","/api/v1/payments/{id}/cancel","200","i","<code>CANCELLED</code>, with a reason such as “Bill corrected”."],
+  ["C8","Capture a cancelled payment","POST","/api/v1/payments/{id}/capture","409","i","<code>INVALID_STATE_TRANSITION</code>. The state machine only allows valid moves: CREATED → PENDING → AUTHORIZED → CAPTURED, plus FAILED, CANCELLED, EXPIRED, UNKNOWN."],
+  ["C9","Back to AUTO capture","PUT","/api/v1/merchants/me/configuration","200","","Restores the setting for the next folders."]]},
+
+ {k:"D",t:"Refunds",s:"refund-service",story:"The insurer pays part of the bill later, so the hospital gives some money back.",r:[
+  ["D1","Refund part of the payment","POST","/api/v1/refunds","201","i","₹500 of the ₹2,000. <code>COMPLETED</code>. Sent too soon after B7 you may get <code>409 PAYMENT_NOT_YET_REFUNDABLE</code>: retry <b>with the same key</b>."],
+  ["D2","Same refund again (replay)","POST","/api/v1/refunds","201","i","The same refund comes back. No second refund."],
+  ["D3","Refund more than is left","POST","/api/v1/refunds","422","i","<code>REFUND_EXCEEDS_CAPTURED_AMOUNT</code> with <code>remainingRefundable: 1500.00</code>. Even parallel refunds can never exceed the captured amount."],
+  ["D4","Get the refund","GET","/api/v1/refunds/{id}","200","","Status and history."],
+  ["D5","List refunds","GET","/api/v1/refunds?paymentId={id}","200","","Filter by payment or status."],
+  ["D6","Refund webhook endpoint","POST","/webhooks/razorpay/refunds","400 401","p","Used by Razorpay. Unsigned calls are refused."]],
+  n:[["look","The hook receiver has <code>refund.completed</code>: the hospital is told; the patient gets no email for a refund. Dashboard → Refunds."]]},
+
+ {k:"E",t:"Transactions and ledger",s:"transaction-service",story:"Finance needs one place with every money movement, and books that always balance.",r:[
+  ["E1","Transactions of the payment","GET","/api/v1/transactions?paymentId={id}","200","","One PAYMENT and one REFUND transaction."],
+  ["E2","Transaction detail","GET","/api/v1/transactions/{ref}","200","","<code>timeline</code> (every status change in order) and <code>ledgerEntries</code> (the accounting lines)."],
+  ["E3","Summary report","GET","/api/v1/reports/summary","200","","Captured, refunded and net amounts for the last day."],
+  ["E4","What the hospital is owed","GET","/api/v1/admin/ledger/accounts/MERCHANT_PAYABLE:{id}/balance","200","o","Captured − refunded: <b>₹1,500</b> after D1."],
+  ["E5","Provider clearing","GET","/api/v1/admin/ledger/accounts/PROVIDER_CLEARING/balance","200","o","Money the provider holds until it settles. Other accounts: SETTLEMENT_BANK, PROVIDER_FEES."],
+  ["E6","Ledger integrity","GET","/api/v1/admin/ledger/integrity","200","o","<code>healthy: true</code>: every posting's debits equal its credits."]],
+  n:[["idea","<b>Double-entry:</b> every movement is booked twice, once as a debit and once as a credit, so the books always balance. Entries are never edited or deleted; a mistake is fixed with a new reversing entry."]]},
+
+ {k:"F",t:"Notifications",s:"notification-service",story:"Hospitals get signed webhooks; patients get emails and texts. Failed deliveries are retried.",r:[
+  ["F1","Notifications of the payment","GET","/api/v1/notifications?paymentId={id}","200","","One row per message: channel (WEBHOOK, EMAIL, SMS), status (DELIVERED, PENDING, DEAD), attempts."],
+  ["F2","Notification detail","GET","/api/v1/notifications/{id}","200","","Every delivery attempt with the receiver's answer."],
+  ["F3","All notifications","GET","/api/v1/admin/notifications","200","o","Every hospital's notifications. Filter <code>status=DEAD</code> for the ones that gave up."],
+  ["F4","Notification detail","GET","/api/v1/admin/notifications/{id}","200","o",""],
+  ["F5","Retry a failed notification","POST","/api/v1/admin/notifications/{id}/retry","200 409","o","Re-queues a DEAD one. A delivered one gives <code>409</code>."]],
+  n:[["try","Stop the receiver (<code>docker stop hook-receiver</code>), create and pay a payment, then F1: PENDING with growing attempts and a nextAttemptAt. Start the receiver again: DELIVERED."],
+     ["sec","Webhooks are signed (<code>X-HPG-Signature</code>), never contain the patient's email or phone, and never go to internal addresses. That is checked when the URL is saved and again before every delivery."]]},
+
+ {k:"G",t:"Disputes and chargebacks",s:"payment-service",story:"The patient tells their bank “I didn't make this payment”. The bank takes the money back from the hospital and sets a deadline to respond with evidence.",r:[
+  ["G1","Bank raises a chargeback","POST","/webhooks/razorpay/payments","200","p","A provider webhook; the pre-request script builds Razorpay's format and signs it. ₹1,500 is disputed and deducted."],
+  ["G2","List my disputes","GET","/api/v1/disputes","200","","<code>OPEN</code>, with <code>respondBy</code>, the deadline."],
+  ["G3","Get the dispute","GET","/api/v1/disputes/{id}","200","","Amount, amount deducted, reason code."],
+  ["G4","Refunds are paused","POST","/api/v1/refunds","409","i","<code>PAYMENT_DISPUTED</code>: a refund plus a lost chargeback would pay the patient twice."],
+  ["G5","Contest with evidence","POST","/api/v1/disputes/{id}/contest","200","i","<code>UNDER_REVIEW</code>. The key makes sure the decision is never sent twice."],
+  ["G6","Contest again, same key","POST","/api/v1/disputes/{id}/contest","200","i","Replayed: <code>Idempotent-Replayed: true</code>."],
+  ["G7","Accept after contesting","POST","/api/v1/disputes/{id}/accept","409","i","<code>DISPUTE_NOT_OPEN</code>: statuses only move forward. Accepting an OPEN dispute gives up the money."],
+  ["G8","Accept without a key","POST","/api/v1/disputes/{id}/accept","400","","<code>MISSING_IDEMPOTENCY_KEY</code>."],
+  ["G9","Bank decides for the hospital","POST","/webhooks/razorpay/payments","200","p","Provider webhook: the dispute is won."],
+  ["G10","Dispute won","GET","/api/v1/disputes/{id}","200","","<code>WON</code>. The ledger has a CHARGEBACK and a CHARGEBACK_REVERSAL posting (send E2 again); refunds work again."]],
+  n:[["look","Dashboard (hospital) → Disputes: the deadline, and the Accept and Contest with evidence buttons."]]},
+
+ {k:"H",t:"Reconciliation",s:"reconciliation-service · operations only",story:"Every day the provider pays out and sends a settlement report. Operations check it line by line against the ledger: was everything paid, at the right amount, exactly once?",r:[
+  ["H1","Upload a settlement file","POST","/api/v1/reconciliation/settlement-files","202 409","o","Body → form-data → file. A batch is created. The same file again is <code>409</code>: files are recognised by checksum."],
+  ["H2","List batches","GET","/api/v1/reconciliation/batches","200","o",""],
+  ["H3","Get the batch","GET","/api/v1/reconciliation/batches/{id}","200","o","Counts per result: MATCHED, AMOUNT_MISMATCH, MISSING_IN_PROVIDER (we captured, they didn't pay), MISSING_IN_INTERNAL_SYSTEM (they paid something we don't know), DUPLICATE."],
+  ["H4","Open differences","GET","/api/v1/reconciliation/batches/{id}/records?resolutionStatus=OPEN","200","o","The rows someone has to look at."],
+  ["H5","Get a record","GET","/api/v1/reconciliation/records/{id}","200","o","Both sides of one difference."],
+  ["H6","Start reviewing it","POST","/api/v1/reconciliation/records/{id}/review","200","o","<code>IN_REVIEW</code>: tells colleagues someone is on it."],
+  ["H7","Resolve it","POST","/api/v1/reconciliation/records/{id}/resolve","200","o","<code>RESOLVED</code> with a type and a note. <b>Nothing is corrected automatically</b>: a person decides."],
+  ["H8","Daily report (JSON)","GET","/api/v1/reconciliation/reports/daily?date=…","200","o",""],
+  ["H9","Daily report (CSV)","GET","/api/v1/reconciliation/reports/daily?date=…","200","o","Same report with <code>Accept: text/csv</code>, for finance."],
+  ["H10","Run against the provider's API","POST","/api/v1/reconciliation/runs","422","o","Fetches the report from Razorpay. With the simulated provider it is 422: upload a file instead."]],
+  n:[["look","Dashboard (operations) → Reconciliation: the batch, its rows, Review and Resolve."]]},
+
+ {k:"I",t:"Operations administration",s:"merchant-service · transaction-service",story:"Platform staff look after hospitals and recover events that failed.",r:[
+  ["I1","List hospitals","GET","/api/v1/admin/merchants","200","o","Filter by status."],
+  ["I2","Get a hospital","GET","/api/v1/admin/merchants/{id}","200","o",""],
+  ["I3","A hospital's configuration","GET","/api/v1/admin/merchants/{id}/configuration","200","o","Readable by operations, but <b>never</b> the webhook secret."],
+  ["I4","Suspend the hospital","POST","/api/v1/admin/merchants/{id}/suspend","200","o","Takes effect within seconds, <b>including tokens the hospital already holds</b>: the gateway keeps a deny-list."],
+  ["I5","Suspended hospital is blocked","GET","/api/v1/payments","403","","<code>MERCHANT_SUSPENDED</code>, even with a still-valid token."],
+  ["I6","Re-activate the hospital","POST","/api/v1/admin/merchants/{id}/activate","200","o","Works again."],
+  ["I7","Republish hospital snapshots","POST","/api/v1/admin/merchants/snapshots/republish","200 202","o","Re-sends every hospital's settings to Kafka, for example after restoring a database."],
+  ["I8","Dead letters","GET","/api/v1/admin/dead-letters","200","o","Events a service could not process after retries. Normally empty."],
+  ["I9","Replay a dead letter","POST","/api/v1/admin/dead-letters/{topic}/{partition}/{offset}/replay","200 409","o","Sends one back after the cause is fixed; a second replay is refused. With none to replay it returns 400 or 404."]]},
+
+ {k:"J",t:"Security and validation",s:"every service",story:"These requests must fail, each in a specific and safe way. The errors are the point.",r:[
+  ["J1","No token","GET","/api/v1/payments","401","p","Every API needs a token."],
+  ["J2","Forged token","GET","/api/v1/payments","401","p","It claims OPS, but the signature isn't ours."],
+  ["J3","Hospital calls an operations API","GET","/api/v1/admin/merchants","403","","Role check."],
+  ["J4","Hospital calls reconciliation","GET","/api/v1/reconciliation/batches","403","","Role check."],
+  ["J5","Another hospital's payment id","GET","/api/v1/payments/{other}","404","","404, not 403: ids can't even be probed."],
+  ["J6","Payment without Idempotency-Key","POST","/api/v1/payments","400","","<code>MISSING_IDEMPOTENCY_KEY</code>."],
+  ["J7","Invalid fields","POST","/api/v1/payments","400","i","<code>VALIDATION_FAILED</code>, listing every bad field."],
+  ["J8","Below the hospital's minimum","POST","/api/v1/payments","422","i","<code>AMOUNT_BELOW_MINIMUM</code>: the rule from A6."],
+  ["J9","Limit above the platform maximum","PUT","/api/v1/merchants/me/configuration","422","","<code>LIMIT_EXCEEDS_PLATFORM_MAXIMUM</code>."],
+  ["J10","Webhook URL with credentials","PUT","/api/v1/merchants/me/configuration","422","","Webhook URL safety."]],
+  n:[["idea","<b>Reading an error:</b> every error is JSON with <code>status</code>, <code>errorCode</code>, <code>title</code>, <code>detail</code> and a <code>correlationId</code> you can search the logs for."]]},
+
+ {k:"Z",t:"Clean-up",s:"merchant-service",story:"Ends the run. Skip it to keep exploring with the same hospital.",r:[
+  ["Z1","Deactivate the test hospital","POST","/api/v1/admin/merchants/{id}/deactivate","200","o","Permanent: a deactivated hospital cannot be re-activated."]]}
+];
+
+const KEY = "hpg-walkthrough-done";
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch (e) {} };
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const total = F.reduce((n, f) => n + f.r.length, 0);
+
+document.getElementById("flow").innerHTML = FLOW.map(([tag, t, d, warn], i) =>
+  `<div class="node${warn ? " warn" : ""}"><span class="dot">${i + 1}</span><span class="tag">${tag}</span><b>${t}</b><small>${d}</small></div>`).join("");
+
+const labels = {try:"Try",look:"Look at",idea:"Key idea",sec:"Security"};
+document.getElementById("folders").innerHTML = F.map(f => `
+<section id="folder-${f.k}">
+  <div class="folder">
+    <div class="folder-head">
+      <span class="letter">${f.k}</span>
+      <div style="display:grid;gap:4px;min-width:0">
+        <span class="svc">${f.s}</span>
+        <h2>${f.t}</h2>
+        <p class="story">${f.story}</p>
+        <span class="fcount" data-count="${f.k}"></span>
+      </div>
+    </div>
+    <div>${f.r.map(([id, name, m, path, codes, flags, d]) => `
+      <div class="req" data-id="${id}">
+        <input type="checkbox" id="chk-${id}" aria-label="Mark ${id} ${esc(name)} as done">
+        <span class="rid">${id}</span>
+        <div class="rbody">
+          <div class="rtop">
+            <label class="rname" for="chk-${id}">${esc(name)}</label>
+            ${codes.split(" ").map(c => `<span class="code ${c[0] === "2" || c[0] === "3" ? "c2" : "c4"}">${c}</span>`).join("")}
+            ${flags.includes("o") ? '<span class="chip ops">Operations</span>' : ""}
+            ${flags.includes("p") ? '<span class="chip pub">No token</span>' : ""}
+            ${flags.includes("i") ? '<span class="chip idem">Idempotency-Key</span>' : ""}
+          </div>
+          <div class="line2"><span class="m ${m}">${m}</span><span class="path">${esc(path)}</span></div>
+          ${d ? `<p class="rdesc">${d}</p>` : ""}
+        </div>
+      </div>`).join("")}
+    </div>
+    ${f.n ? `<div class="notes">${f.n.map(([kind, text]) => `<div class="note ${kind}"><span class="lbl">${labels[kind]}</span><span>${text}</span></div>`).join("")}</div>` : ""}
+  </div>
+</section>`).join("");
+
+document.getElementById("rail").innerHTML =
+  `<a href="#setup"><span class="k">✓</span>Setup</a><a href="#journey"><span class="k">→</span>Journey</a>` +
+  F.map(f => `<a href="#folder-${f.k}" data-rail="${f.k}"><span class="k">${f.k}</span>${f.t.split(" ")[0].replace(":", "")}</a>`).join("");
+
+function refresh() {
+  document.querySelectorAll(".req").forEach(el => {
+    const on = done.has(el.dataset.id);
+    el.classList.toggle("checked", on);
+    el.querySelector("input").checked = on;
+  });
+  F.forEach(f => {
+    const n = f.r.filter(r => done.has(r[0])).length;
+    document.querySelector(`[data-count="${f.k}"]`).textContent = `${n} of ${f.r.length} done`;
+    document.querySelector(`[data-rail="${f.k}"]`).classList.toggle("done", n === f.r.length);
+  });
+  document.getElementById("barFill").style.width = (done.size / total * 100) + "%";
+  document.getElementById("progressText").textContent = `${done.size} of ${total} requests done`;
+}
+document.getElementById("folders").addEventListener("change", e => {
+  const id = e.target.closest(".req")?.dataset.id;
+  if (!id) return;
+  e.target.checked ? done.add(id) : done.delete(id);
+  save(); refresh();
+});
+document.getElementById("resetBtn").addEventListener("click", () => { done.clear(); save(); refresh(); });
+refresh();
+</script>
+</body>
+</html>

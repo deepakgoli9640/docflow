@@ -38,6 +38,7 @@ contact details.
 | 13 | [Implementation plan](13-implementation-plan.md) | Phases 2–8, deliverables, exit criteria |
 | — | [Load test report](load-test-report.md) | Measured latency and throughput, bottleneck, how to raise it |
 | — | [Interview guide](interview-guide.md) | Pitch, deep dives, likely questions, honest limitations |
+| — | [Postman walkthrough (visual)](postman-walkthrough.html) | The same walkthrough as a page to open in a browser, with progress tick-boxes |
 | — | [Postman workflow guide](postman-guide.md) | Every request of the Postman collection in order: what it does, what happens behind it, what to look at |
 | — | [Testing guide](testing-guide.md) | Step-by-step manual and automated tests for every service, feature and end-to-end flow |
 | — | [Decision log](decisions.md) | Every significant decision, the alternatives, and why |

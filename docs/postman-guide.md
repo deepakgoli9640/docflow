@@ -7,6 +7,9 @@ to look at, so you learn how the payment gateway works by using it.
 Allow about 2 hours to go through it slowly. The whole collection also runs in about a minute with **Run**, but
 sending requests one at a time and reading the responses is how you learn.
 
+> Prefer it visual? Open [postman-walkthrough.html](postman-walkthrough.html) in a browser: the same walkthrough
+> with a progress tick-box per request.
+>
 > Related: [testing-guide.md](testing-guide.md) (full test plan with curl, failure drills, observability) and
 > the README's architecture section.
 
