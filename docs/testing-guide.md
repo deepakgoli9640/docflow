@@ -73,7 +73,8 @@ Run these first. If one fails, report it before testing by hand.
 
 ---
 
-> **Prefer Postman?** `import-postman.bat` (Windows) puts every endpoint into Postman, in the order of this guide,
+> **Prefer Postman?** `import-postman.bat` (Windows) puts every endpoint into Postman, in the order of this guide
+> (walkthrough: [postman-guide.md](postman-guide.md)),
 > with tokens, Idempotency-Keys and expected-result tests built in. *Run collection* executes parts A–J
 > automatically (92 requests). Parts K and L still need the commands below.
 
