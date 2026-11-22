@@ -50,7 +50,11 @@ def req(name, method, path, *, auth="hospital", body=None, form=None, files=None
         hdrs.append({"key": "Content-Type", "value": "application/json"})
     hdrs += [{"key": k, "value": v} for k, v in headers]
     request = {"method": method, "header": hdrs, "url": url(path, query), "description": desc.strip()}
-    if auth:
+    if auth == "basic":  # Postman's built-in Basic Auth: no script involved
+        request["auth"] = {"type": "basic", "basic": [
+            {"key": "username", "value": "{{opsClientId}}", "type": "string"},
+            {"key": "password", "value": "{{opsClientSecret}}", "type": "string"}]}
+    elif auth:
         request["auth"] = {"type": "bearer", "bearer": [{"key": "token", "value": "{{%sToken}}" % auth, "type": "string"}]}
     else:
         request["auth"] = {"type": "noauth"}
@@ -108,6 +112,7 @@ if (p.id) {{
 """
 
 DISPUTE_WEBHOOK_PRE = """
+const CJS = require('crypto-js');
 // Builds a Razorpay-format dispute event and signs it with the simulated provider's key (HMAC-SHA256).
 const now = Math.floor(Date.now() / 1000);
 if ('{event}' === 'payment.dispute.created') pm.collectionVariables.set('providerDisputeId', 'disp_pm_' + Date.now());
@@ -122,7 +127,7 @@ const body = JSON.stringify({{
   }} }} }}
 }});
 pm.variables.set('webhookBody', body);
-pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(body, pm.collectionVariables.get('simulatorSigningKey')).toString(CryptoJS.enc.Hex));
+pm.variables.set('webhookSignature', CJS.HmacSHA256(body, pm.collectionVariables.get('simulatorSigningKey')).toString(CJS.enc.Hex));
 pm.variables.set('webhookEventId', 'evt_' + pm.variables.replaceIn('{{{{$guid}}}}'));
 """
 
@@ -139,6 +144,7 @@ COLLECTION_PRE = r"""
 //   {{opsToken}}      from opsClientId / opsClientSecret (environment)
 //   {{hospitalToken}} from hospitalKeyId / hospitalKeySecret (set by "Register a hospital", or put the
 //                      seed script's key in the environment)
+const CJS = require('crypto-js');
 const v = k => pm.environment.get(k) || pm.collectionVariables.get(k);
 let wanted = '';
 try { wanted = String(pm.request.auth.parameters().get('token') || ''); } catch (e) { }
@@ -153,7 +159,7 @@ if (kind) {
   if (!fresh && id && secret) {
     pm.sendRequest({
       url: v('baseUrl') + '/oauth2/token', method: 'POST',
-      header: { 'Authorization': 'Basic ' + CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(id + ':' + secret)) },
+      header: { 'Authorization': 'Basic ' + CJS.enc.Base64.stringify(CJS.enc.Utf8.parse(id + ':' + secret)) },
       body: { mode: 'urlencoded', urlencoded: [{ key: 'grant_type', value: 'client_credentials' }] }
     }, (err, res) => {
       if (err || res.code !== 200) { console.warn(kind + ' token request failed', err || res.code, res && res.text()); return; }
@@ -184,12 +190,21 @@ items.append(folder("0. Platform", """
 Checks that the stack answers, and the token endpoint. Tokens are fetched automatically by the collection's
 pre-request script, so you never need to call /oauth2/token yourself; these requests show how it works.
 """, [
-    req("Get an operations token (client credentials)", "POST", "/oauth2/token", auth=None,
+    req("Get an operations token (client credentials)", "POST", "/oauth2/token", auth="basic",
         form=[("grant_type", "client_credentials")],
-        headers=[("Authorization", "Basic {{opsBasic}}")],
-        pre="pm.variables.set('opsBasic', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(pm.variables.get('opsClientId') + ':' + pm.variables.get('opsClientSecret'))));",
-        tests="pm.test('JWT issued, 15 minutes', () => { const t = pm.response.json(); pm.expect(t.token_type).to.eql('Bearer'); pm.expect(t.expires_in).to.be.above(0); });",
-        desc="OAuth2 client-credentials grant: HTTP Basic with the client id and secret. Rate limit: 5/s per IP (burst 10)."),
+        tests="""
+if (pm.response.code !== 200) {
+  const secret = pm.variables.get('opsClientSecret');
+  console.error(!secret
+    ? 'opsClientSecret is empty: select the "HPG local" environment and set opsClientSecret to HPG_OPS_CLIENT_SECRET from deploy/env/.env (or run import-postman.bat again after start-hpg.bat).'
+    : 'The operations client id or secret was refused: compare opsClientSecret with HPG_OPS_CLIENT_SECRET in deploy/env/.env.');
+}
+pm.test('JWT issued, 15 minutes', () => { const t = pm.response.json(); pm.expect(t.token_type).to.eql('Bearer'); pm.expect(t.expires_in).to.be.above(0); });
+""",
+        desc="OAuth2 client-credentials grant: HTTP Basic with the client id and secret (see the Authorization tab: "
+             "opsClientId / opsClientSecret from the HPG local environment). 400 invalid_request means the secret is "
+             "empty, 401 invalid_client that it is wrong: select the HPG local environment and check opsClientSecret against HPG_OPS_CLIENT_SECRET "
+             "in deploy/env/.env. Rate limit: 5/s per IP (burst 10)."),
     req("Public signing keys (JWKS)", "GET", "/oauth2/jwks", auth=None,
         tests="pm.test('has keys', () => pm.expect(pm.response.json().keys).to.be.an('array').that.is.not.empty);",
         desc="Public keys the gateway and services use to verify tokens. Two keys are listed during a key rotation."),
@@ -511,8 +526,9 @@ Each request should fail in a specific, safe way.
     req("Forged token (401)", "GET", "/api/v1/payments", auth=None, codes=(401,),
         headers=[("Authorization", "Bearer {{forgedToken}}")],
         pre="""
+const CJS = require('crypto-js');
 // A well-formed JWT with a made-up signature, built here so no token-like string is committed.
-const b64url = o => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(JSON.stringify(o))).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+const b64url = o => CJS.enc.Base64.stringify(CJS.enc.Utf8.parse(JSON.stringify(o))).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');
 pm.variables.set('forgedToken', b64url({ alg: 'RS256' }) + '.' + b64url({ sub: 'x', mid: 'x', roles: ['OPS'] }) + '.c2lnbmF0dXJl');
 """,
         desc="A token signed by someone else is refused, whatever it claims (here the OPS role)."),
