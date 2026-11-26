@@ -38,3 +38,6 @@ deploy/env/.env
 
 # Postman files with local secrets (import-postman.bat)
 postman/out/
+
+# Codespaces state (demo data marker, seed output with sign-in details)
+.devcontainer/.state/
