@@ -1,14 +1,13 @@
 package com.hpg.gateway.config;
 
 import com.hpg.common.security.TokenClaims;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import reactor.core.publisher.Mono;
-
-import java.net.InetSocketAddress;
 
 /**
  * Keys for Redis token-bucket rate limiting. Redis is used because limits must be shared by all
@@ -21,6 +20,16 @@ import java.net.InetSocketAddress;
  */
 @Configuration
 public class RateLimitConfig {
+
+    private final ClientIpResolver clientIps;
+
+    /**
+     * @param trustedProxies proxies in front of the gateway that append to X-Forwarded-For (0 = use the TCP
+     *                       peer; 1 on Cloud Run). See {@link ClientIpResolver}.
+     */
+    public RateLimitConfig(@Value("${hpg.gateway.client-ip.trusted-proxies:0}") int trustedProxies) {
+        this.clientIps = new ClientIpResolver(trustedProxies);
+    }
 
     /** Authenticated traffic: one bucket per merchant (all of its API keys share it), else per client. */
     @Bean
@@ -42,12 +51,7 @@ public class RateLimitConfig {
         return exchange -> Mono.just("ip:" + clientIp(exchange));
     }
 
-    /**
-     * Uses the TCP peer address. Behind a load balancer this is the balancer's address; production must
-     * configure trusted proxies and use X-Forwarded-For (never trust that header from the internet).
-     */
-    private static String clientIp(org.springframework.web.server.ServerWebExchange exchange) {
-        InetSocketAddress remote = exchange.getRequest().getRemoteAddress();
-        return remote != null && remote.getAddress() != null ? remote.getAddress().getHostAddress() : "unknown";
+    private String clientIp(org.springframework.web.server.ServerWebExchange exchange) {
+        return clientIps.resolve(exchange.getRequest());
     }
 }

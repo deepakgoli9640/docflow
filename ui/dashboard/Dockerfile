@@ -5,7 +5,8 @@ ENV GATEWAY_URL=http://api-gateway:8080 \
     OIDC_AUTHORITY=/auth/realms/hpg \
     OIDC_CLIENT_ID=hpg-dashboard \
     OIDC_UPSTREAM=http://keycloak:8080 \
-    NGINX_RESOLVER=127.0.0.11
+    NGINX_RESOLVER=127.0.0.11 \
+    GATEWAY_HOST_HEADER='$host'
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY index.html favicon.svg /usr/share/nginx/html/
 COPY css /usr/share/nginx/html/css
