@@ -3,7 +3,7 @@
 // stack with demo data every time it starts (start.sh). Needs the 4-core / 16 GB machine.
 {
   "name": "Healthcare Payment Gateway",
-  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "build": { "dockerfile": "Dockerfile" },   // Java 21 image minus its broken Yarn apt source
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
