@@ -106,6 +106,13 @@ then run `wsl --shutdown` and start Docker Desktop again. Close Chrome tabs and 
 To try the other services, run their tests one module at a time (`mvnw.cmd -pl services/refund-service -am verify`)
 or use a cloud machine (GitHub Codespaces, or the public demo server below).
 
+## GitHub Codespaces
+
+Open a codespace on this repository (**Code → Codespaces**, 4-core machine): it installs everything, builds the
+services and starts the whole stack with demo data by itself, in about 12–15 minutes the first time. Then
+`./scripts/run-postman.sh` runs every Postman request. Ports, Postman desktop and free-hour tips:
+[docs/codespaces.md](docs/codespaces.md).
+
 ## Public demo server (cloud)
 
 On a fresh Ubuntu 22.04/24.04 server with about 4 GB RAM (AWS, Google Cloud, Azure, DigitalOcean, ...), open ports

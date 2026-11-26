@@ -1,0 +1,39 @@
+// GitHub Codespaces / VS Code Dev Containers for the Healthcare Payment Gateway.
+// A new codespace installs Java 21, Docker and Node, builds everything once (post-create.sh) and starts the
+// stack with demo data every time it starts (start.sh). Needs the 4-core / 16 GB machine.
+{
+  "name": "Healthcare Payment Gateway",
+  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "forwardPorts": [8080, 8090, 8025, 3000],
+  "portsAttributes": {
+    "8080": { "label": "API gateway", "onAutoForward": "silent" },
+    "8090": { "label": "Dashboard", "onAutoForward": "notify" },
+    "8025": { "label": "Mailpit (patient emails)", "onAutoForward": "silent" },
+    "3000": { "label": "Grafana", "onAutoForward": "silent" }
+  },
+  "otherPortsAttributes": { "onAutoForward": "ignore" },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-boot-dev-pack",
+        "ms-azuretools.vscode-docker",
+        "Postman.postman-for-vscode"
+      ]
+    },
+    "codespaces": {
+      "openFiles": ["docs/codespaces.md"]
+    }
+  }
+}
