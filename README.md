@@ -128,6 +128,19 @@ No SSH needed for the setup: paste [scripts/cloud/oracle-cloud-init.sh](scripts/
 *Show advanced options → Management → Initialization script* when creating the instance, and the server deploys itself
 on first boot (progress in `/var/log/hpg-setup.log`).
 
+## Google Cloud Run
+
+One command deploys every service to Cloud Run, with Cloud SQL, Secret Manager and a private Kafka + Redis
+VM (or your own managed Kafka and Redis). Run it from Google Cloud Shell:
+
+```bash
+PROJECT_ID=my-gcp-project ./scripts/cloud/deploy-cloud-run.sh            # deploy or update
+PROJECT_ID=my-gcp-project ./scripts/cloud/deploy-cloud-run.sh destroy --yes
+```
+
+Only the API gateway and dashboard are public. What it creates, costs, real Razorpay/SMTP/SMS settings and
+troubleshooting: [docs/cloud-run.md](docs/cloud-run.md).
+
 ## Quick start
 
 ```bash

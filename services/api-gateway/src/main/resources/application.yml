@@ -322,6 +322,10 @@ spring:
 
 hpg:
   gateway:
+    client-ip:
+      # Proxies in front of the gateway that append to X-Forwarded-For (0 = use the TCP peer). Per-IP rate
+      # limits need the real client address: 1 on Cloud Run (Google's front end), 1 behind one load balancer.
+      trusted-proxies: ${HPG_CLIENT_IP_TRUSTED_PROXIES:0}
     deny-list:
       # Longer than the 15-minute token lifetime: after that a suspended merchant has no valid token left.
       ttl: 20m

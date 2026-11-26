@@ -10,6 +10,8 @@ server {
     # container gets a new IP, and a startup-time lookup would keep sending traffic to the old one (502).
     resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
     set $gateway ${GATEWAY_URL};
+    # Host header sent to the gateway: the browser's host by default; '$proxy_host' (the gateway's own host)
+    # where the gateway is routed by host name, as on Cloud Run.
 
     # Strict CSP: only our own scripts/styles; no inline script, no third-party origins.
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" always;
@@ -31,7 +33,8 @@ server {
     # inherited (nginx only inherits add_header into locations that define none).
     location /checkout/ {
         proxy_pass $gateway;
-        proxy_set_header Host $host;
+        proxy_set_header Host ${GATEWAY_HOST_HEADER};
+        proxy_ssl_server_name on;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         add_header X-Content-Type-Options nosniff always;
@@ -62,7 +65,8 @@ server {
 
     location ~ ^/(api|oauth2)/ {
         proxy_pass $gateway;
-        proxy_set_header Host $host;
+        proxy_set_header Host ${GATEWAY_HOST_HEADER};
+        proxy_ssl_server_name on;   # SNI, for a gateway behind HTTPS (Cloud Run)
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 30s;
