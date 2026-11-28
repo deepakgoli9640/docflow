@@ -6,7 +6,16 @@
   "build": { "dockerfile": "Dockerfile" },   // Java 21 image minus its broken Yarn apt source
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
+    // Claude Code CLI + its VS Code extension (installs the latest release; it auto-updates)
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+  // Keep Claude Code's sign-in and settings across container rebuilds (see docs/codespaces.md)
+  "mounts": [
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+  ],
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
   },
   "hostRequirements": {
     "cpus": 4,
