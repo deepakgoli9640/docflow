@@ -58,6 +58,16 @@ Anyone with a public port's address can call it: set it back to **Private** when
 | Fresh database | `docker compose -f deploy/docker-compose.yml --profile '*' down -v && rm -rf .devcontainer/.state && bash .devcontainer/start.sh` |
 | Tests | `./mvnw verify` (uses Docker; takes a while on 4 cores) |
 
+## Claude Code
+
+The codespace comes with Claude Code (the `claude` command and its VS Code extension).
+1. In the terminal run `claude` and sign in with your Claude account. If the browser says it is done but the
+   terminal keeps waiting, copy the code the browser shows and paste it into the terminal.
+2. Your sign-in survives stops, starts and rebuilds of this codespace.
+3. To skip signing in on every **new** codespace: on your own computer run `claude setup-token`, then add the
+   token at https://github.com/settings/codespaces → **Secrets → New secret**, name `CLAUDE_CODE_OAUTH_TOKEN`,
+   repository `deepakgoli9640/docflow` (or use `ANTHROPIC_API_KEY` with an API key instead).
+
 ## Free hours
 
 GitHub Free includes **120 core-hours a month**, so **30 hours** on this 4-core machine, plus 15 GB storage.
